@@ -236,6 +236,27 @@ export const SandboxPruneSchema = z
   .strict()
   .optional();
 
+export const SandboxSeatbeltProxySchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    port: z.number().int().nonnegative().optional(),
+    defaultPolicy: z.union([z.literal("allow"), z.literal("deny")]).optional(),
+    allowedDomains: z.array(z.string()).optional(),
+    deniedDomains: z.array(z.string()).optional(),
+  })
+  .strict()
+  .optional();
+
+export const SandboxSeatbeltSchema = z
+  .object({
+    profile: z.string().optional(),
+    profileDir: z.string().optional(),
+    params: z.record(z.string(), z.string()).optional(),
+    proxy: SandboxSeatbeltProxySchema,
+  })
+  .strict()
+  .optional();
+
 const ToolPolicyBaseSchema = z
   .object({
     allow: z.array(z.string()).optional(),
@@ -470,12 +491,14 @@ const ToolLoopDetectionSchema = z
 export const AgentSandboxSchema = z
   .object({
     mode: z.union([z.literal("off"), z.literal("non-main"), z.literal("all")]).optional(),
+    backend: z.union([z.literal("docker"), z.literal("seatbelt")]).optional(),
     workspaceAccess: z.union([z.literal("none"), z.literal("ro"), z.literal("rw")]).optional(),
     sessionToolsVisibility: z.union([z.literal("spawned"), z.literal("all")]).optional(),
     scope: z.union([z.literal("session"), z.literal("agent"), z.literal("shared")]).optional(),
     perSession: z.boolean().optional(),
     workspaceRoot: z.string().optional(),
     docker: SandboxDockerSchema,
+    seatbelt: SandboxSeatbeltSchema,
     browser: SandboxBrowserSchema,
     prune: SandboxPruneSchema,
   })
