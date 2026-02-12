@@ -141,7 +141,7 @@ export async function resolveSandboxContext(params: {
       seatbelt.params = {
         PROJECT_DIR: workspaceDir,
         WORKSPACE_DIR: agentWorkspaceDir,
-        HOME_DIR: workspaceDir,
+        HOME_DIR: process.env.HOME || workspaceDir,
         TMPDIR: "/tmp",
         ...seatbelt.params,
       };
