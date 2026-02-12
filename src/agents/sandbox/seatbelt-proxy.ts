@@ -91,6 +91,9 @@ export async function startSeatbeltProxy(cfg: OpenClawConfig): Promise<number | 
     return null;
   }
 
+  // Stop any existing proxy first (handles gateway restarts)
+  stopSeatbeltProxy();
+
   // Check proxy script exists
   if (!fs.existsSync(PROXY_SCRIPT)) {
     log.warn?.(`proxy script not found at ${PROXY_SCRIPT} — copy proxy.mjs to this location`);
@@ -104,6 +107,25 @@ export async function startSeatbeltProxy(cfg: OpenClawConfig): Promise<number | 
   fs.mkdirSync(configDir, { recursive: true });
   fs.mkdirSync(proxyConfig.logDir!, { recursive: true });
   fs.writeFileSync(PROXY_CONFIG_PATH, JSON.stringify(proxyConfig, null, 2));
+
+  // Kill any orphaned proxy on the configured port
+  if (proxyConfig.port > 0) {
+    try {
+      const { execSync } = await import("node:child_process");
+      const pid = execSync(`lsof -ti tcp:${proxyConfig.port} -s tcp:listen`, {
+        encoding: "utf-8",
+        timeout: 3000,
+      }).trim();
+      if (pid) {
+        process.kill(parseInt(pid, 10), "SIGTERM");
+        log.info?.(`killed orphaned proxy on port ${proxyConfig.port} (pid ${pid})`);
+        // Give it a moment to release the port
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    } catch {
+      // No process on port — good
+    }
+  }
 
   // Start proxy process
   const child = spawn("node", [PROXY_SCRIPT, "--config", PROXY_CONFIG_PATH], {

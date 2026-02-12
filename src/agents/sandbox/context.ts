@@ -136,6 +136,16 @@ export async function resolveSandboxContext(params: {
         seatbelt.proxy = { ...seatbelt.proxy, port: livePort };
       }
     }
+    // Auto-populate seatbelt params that profiles expect
+    if (seatbelt) {
+      seatbelt.params = {
+        PROJECT_DIR: workspaceDir,
+        WORKSPACE_DIR: agentWorkspaceDir,
+        HOME_DIR: workspaceDir,
+        TMPDIR: "/tmp",
+        ...seatbelt.params,
+      };
+    }
     return {
       enabled: true,
       backend: "seatbelt",
