@@ -8,6 +8,7 @@ import {
   resolveConfiguredModelRef,
   resolveHooksGmailModel,
 } from "../agents/model-selection.js";
+import { startSeatbeltProxy } from "../agents/sandbox/seatbelt-proxy.js";
 import { startGmailWatcher } from "../hooks/gmail-watcher.js";
 import {
   clearInternalHooks,
@@ -45,6 +46,18 @@ export async function startGatewaySidecars(params: {
     browserControl = await startBrowserControlServerIfEnabled();
   } catch (err) {
     params.logBrowser.error(`server failed to start: ${String(err)}`);
+  }
+
+  // Start seatbelt network proxy if any agent uses seatbelt backend.
+  if (process.platform === "darwin") {
+    try {
+      const proxyPort = await startSeatbeltProxy(params.cfg);
+      if (proxyPort) {
+        params.log.warn(`seatbelt proxy started on port ${proxyPort}`);
+      }
+    } catch (err) {
+      params.log.warn(`seatbelt proxy failed to start: ${String(err)}`);
+    }
   }
 
   // Start Gmail watcher if configured (hooks.gmail.account).

@@ -14,6 +14,7 @@ import { ensureSandboxContainer } from "./docker.js";
 import { createSandboxFsBridge } from "./fs-bridge.js";
 import { maybePruneSandboxes } from "./prune.js";
 import { resolveSandboxRuntimeStatus } from "./runtime-status.js";
+import { getSeatbeltProxyPort } from "./seatbelt-proxy.js";
 import { resolveSandboxScopeKey, resolveSandboxWorkspaceDir } from "./shared.js";
 import { ensureSandboxWorkspace } from "./workspace.js";
 
@@ -105,6 +106,14 @@ export async function resolveSandboxContext(params: {
 
   // Seatbelt backend: no Docker container needed
   if (cfg.backend === "seatbelt") {
+    // Override proxy port with the live port from the running proxy
+    const seatbelt = cfg.seatbelt ? { ...cfg.seatbelt } : undefined;
+    if (seatbelt?.proxy?.enabled) {
+      const livePort = getSeatbeltProxyPort();
+      if (livePort) {
+        seatbelt.proxy = { ...seatbelt.proxy, port: livePort };
+      }
+    }
     return {
       enabled: true,
       backend: "seatbelt",
@@ -115,7 +124,7 @@ export async function resolveSandboxContext(params: {
       containerName: "", // not used for seatbelt
       containerWorkdir: workspaceDir, // seatbelt runs on host paths
       docker: cfg.docker,
-      seatbelt: cfg.seatbelt,
+      seatbelt,
       tools: cfg.tools,
       browserAllowHostControl: cfg.browser.allowHostControl,
     };
