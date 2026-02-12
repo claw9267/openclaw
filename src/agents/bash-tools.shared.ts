@@ -7,11 +7,17 @@ import { assertSandboxPath } from "./sandbox-paths.js";
 
 const CHUNK_LIMIT = 8 * 1024;
 
+import type { SandboxBackend, SandboxSeatbeltConfig } from "./sandbox/types.js";
+
 export type BashSandboxConfig = {
+  /** Sandbox backend. Default: "docker". */
+  backend: SandboxBackend;
   containerName: string;
   workspaceDir: string;
   containerWorkdir: string;
   env?: Record<string, string>;
+  /** Seatbelt configuration. Set when backend is "seatbelt". */
+  seatbelt?: SandboxSeatbeltConfig;
 };
 
 export function buildSandboxEnv(params: {
@@ -76,6 +82,46 @@ export function buildDockerExecArgs(params: {
     ? 'export PATH="${OPENCLAW_PREPEND_PATH}:$PATH"; unset OPENCLAW_PREPEND_PATH; '
     : "";
   args.push(params.containerName, "sh", "-lc", `${pathExport}${params.command}`);
+  return args;
+}
+
+export function buildSeatbeltExecArgs(params: {
+  profilePath: string;
+  command: string;
+  workdir?: string;
+  env: Record<string, string>;
+  seatbeltParams?: Record<string, string>;
+  proxyPort?: number;
+}) {
+  const args = ["-f", params.profilePath];
+
+  // Add seatbelt -D parameters
+  for (const [key, value] of Object.entries(params.seatbeltParams ?? {})) {
+    args.push("-D", `${key}=${value}`);
+  }
+
+  // Build env export prefix for the shell command
+  const envParts: string[] = [];
+  for (const [key, value] of Object.entries(params.env)) {
+    // Escape single quotes in values
+    const escaped = value.replace(/'/g, "'\\''");
+    envParts.push(`export ${key}='${escaped}';`);
+  }
+
+  // Inject proxy env vars if a proxy port is configured
+  if (params.proxyPort) {
+    const proxyUrl = `http://127.0.0.1:${params.proxyPort}`;
+    envParts.push(`export HTTP_PROXY='${proxyUrl}';`);
+    envParts.push(`export HTTPS_PROXY='${proxyUrl}';`);
+    envParts.push(`export http_proxy='${proxyUrl}';`);
+    envParts.push(`export https_proxy='${proxyUrl}';`);
+  }
+
+  const cdPart = params.workdir ? `cd '${params.workdir.replace(/'/g, "'\\''")}';` : "";
+  const envExport = envParts.length > 0 ? envParts.join(" ") + " " : "";
+
+  args.push("sh", "-c", `${envExport}${cdPart}${params.command}`);
+
   return args;
 }
 

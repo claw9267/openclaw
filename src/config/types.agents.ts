@@ -6,6 +6,7 @@ import type {
   SandboxBrowserSettings,
   SandboxDockerSettings,
   SandboxPruneSettings,
+  SandboxSeatbeltSettings,
 } from "./types.sandbox.js";
 import type { AgentToolsConfig, MemorySearchConfig } from "./types.tools.js";
 
@@ -55,8 +56,12 @@ export type AgentConfig = {
     /** Legacy alias for scope ("session" when true, "shared" when false). */
     perSession?: boolean;
     workspaceRoot?: string;
+    /** Sandbox backend: "docker" (default) or "seatbelt" (macOS only). */
+    backend?: "docker" | "seatbelt";
     /** Docker-specific sandbox overrides for this agent. */
     docker?: SandboxDockerSettings;
+    /** Seatbelt (sandbox-exec) overrides for this agent. */
+    seatbelt?: SandboxSeatbeltSettings;
     /** Optional sandboxed browser overrides for this agent. */
     browser?: SandboxBrowserSettings;
     /** Auto-prune overrides for this agent. */

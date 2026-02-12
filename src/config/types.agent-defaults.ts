@@ -9,6 +9,7 @@ import type {
   SandboxBrowserSettings,
   SandboxDockerSettings,
   SandboxPruneSettings,
+  SandboxSeatbeltSettings,
 } from "./types.sandbox.js";
 import type { MemorySearchConfig } from "./types.tools.js";
 
@@ -268,8 +269,12 @@ export type AgentDefaultsConfig = {
     perSession?: boolean;
     /** Root directory for sandbox workspaces. */
     workspaceRoot?: string;
+    /** Sandbox backend: "docker" (default) or "seatbelt" (macOS only). */
+    backend?: "docker" | "seatbelt";
     /** Docker-specific sandbox settings. */
     docker?: SandboxDockerSettings;
+    /** Seatbelt (sandbox-exec) settings. Only used when backend is "seatbelt". */
+    seatbelt?: SandboxSeatbeltSettings;
     /** Optional sandboxed browser settings. */
     browser?: SandboxBrowserSettings;
     /** Auto-prune sandbox containers. */
