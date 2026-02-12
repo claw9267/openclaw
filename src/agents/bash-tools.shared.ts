@@ -92,6 +92,7 @@ export function buildSeatbeltExecArgs(params: {
   env: Record<string, string>;
   seatbeltParams?: Record<string, string>;
   proxyPort?: number;
+  agentId?: string;
 }) {
   const args = ["-f", params.profilePath];
 
@@ -110,11 +111,16 @@ export function buildSeatbeltExecArgs(params: {
 
   // Inject proxy env vars if a proxy port is configured
   if (params.proxyPort) {
-    const proxyUrl = `http://127.0.0.1:${params.proxyPort}`;
+    // Include agent ID in proxy URL via basic auth so the proxy can identify the agent
+    // for per-agent domain filtering (works with CONNECT tunneling too)
+    const authPart = params.agentId ? `${params.agentId}:x@` : "";
+    const proxyUrl = `http://${authPart}127.0.0.1:${params.proxyPort}`;
     envParts.push(`export HTTP_PROXY='${proxyUrl}';`);
     envParts.push(`export HTTPS_PROXY='${proxyUrl}';`);
     envParts.push(`export http_proxy='${proxyUrl}';`);
     envParts.push(`export https_proxy='${proxyUrl}';`);
+    envParts.push(`export no_proxy='localhost,127.0.0.1';`);
+    envParts.push(`export NO_PROXY='localhost,127.0.0.1';`);
   }
 
   const cdPart = params.workdir ? `cd '${params.workdir.replace(/'/g, "'\\''")}';` : "";
