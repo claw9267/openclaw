@@ -52,3 +52,8 @@ export const SANDBOX_AGENT_WORKSPACE_MOUNT = "/agent";
 export const SANDBOX_STATE_DIR = path.join(STATE_DIR, "sandbox");
 export const SANDBOX_REGISTRY_PATH = path.join(SANDBOX_STATE_DIR, "containers.json");
 export const SANDBOX_BROWSER_REGISTRY_PATH = path.join(SANDBOX_STATE_DIR, "browsers.json");
+
+// Seatbelt defaults
+export const DEFAULT_SEATBELT_PROFILE_DIR = path.join(STATE_DIR, "seatbelt-profiles");
+export const DEFAULT_SEATBELT_PROFILE = "default.sb";
+export const DEFAULT_SEATBELT_PROXY_PORT = 0; // auto-assign

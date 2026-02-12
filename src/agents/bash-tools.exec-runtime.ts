@@ -22,6 +22,7 @@ import {
 } from "./bash-process-registry.js";
 import {
   buildDockerExecArgs,
+  buildSeatbeltExecArgs,
   chunkString,
   clampWithDefault,
   readEnvInt,
@@ -377,18 +378,37 @@ export async function runExecProcess(opts: {
         stdinMode: "pipe-open";
       } = (() => {
     if (opts.sandbox) {
+      const isSeatbelt = opts.sandbox.backend === "seatbelt";
+      const argv = isSeatbelt
+        ? [
+            "sandbox-exec",
+            ...buildSeatbeltExecArgs({
+              profilePath: path.join(
+                opts.sandbox.seatbelt?.profileDir ?? "",
+                opts.sandbox.seatbelt?.profile ?? "default.sb",
+              ),
+              command: execCommand,
+              workdir: opts.containerWorkdir ?? opts.sandbox.workspaceDir,
+              env: opts.env,
+              seatbeltParams: opts.sandbox.seatbelt?.params,
+              proxyPort: opts.sandbox.seatbelt?.proxy?.enabled
+                ? opts.sandbox.seatbelt.proxy.port
+                : undefined,
+            }),
+          ]
+        : [
+            "docker",
+            ...buildDockerExecArgs({
+              containerName: opts.sandbox.containerName,
+              command: execCommand,
+              workdir: opts.containerWorkdir ?? opts.sandbox.containerWorkdir,
+              env: opts.env,
+              tty: opts.usePty,
+            }),
+          ];
       return {
         mode: "child" as const,
-        argv: [
-          "docker",
-          ...buildDockerExecArgs({
-            containerName: opts.sandbox.containerName,
-            command: execCommand,
-            workdir: opts.containerWorkdir ?? opts.sandbox.containerWorkdir,
-            env: opts.env,
-            tty: opts.usePty,
-          }),
-        ],
+        argv,
         env: process.env,
         stdinMode: opts.usePty ? ("pipe-open" as const) : ("pipe-closed" as const),
       };

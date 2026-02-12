@@ -125,6 +125,24 @@ export async function resolveSandboxContext(params: {
     workspaceDir: params.workspaceDir,
   });
 
+  // Seatbelt backend: no Docker container needed
+  if (cfg.backend === "seatbelt") {
+    return {
+      enabled: true,
+      backend: "seatbelt",
+      sessionKey: rawSessionKey,
+      workspaceDir,
+      agentWorkspaceDir,
+      workspaceAccess: cfg.workspaceAccess,
+      containerName: "", // not used for seatbelt
+      containerWorkdir: workspaceDir, // seatbelt runs on host paths
+      docker: cfg.docker,
+      seatbelt: cfg.seatbelt,
+      tools: cfg.tools,
+      browserAllowHostControl: cfg.browser.allowHostControl,
+    };
+  }
+
   const docker = await resolveSandboxDockerUser({
     docker: cfg.docker,
     workspaceDir,
@@ -168,6 +186,7 @@ export async function resolveSandboxContext(params: {
 
   const sandboxContext: SandboxContext = {
     enabled: true,
+    backend: "docker",
     sessionKey: rawSessionKey,
     workspaceDir,
     agentWorkspaceDir,
