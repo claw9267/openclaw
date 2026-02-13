@@ -1,5 +1,6 @@
 #!/bin/bash
 # Install the fork's dist over the Homebrew OpenClaw installation.
+# Only overwrites .js and .map files — preserves control-ui, canvas-host, bundled, etc.
 # Creates a backup so you can restore the original.
 set -euo pipefail
 
@@ -25,9 +26,19 @@ case "${1:-install}" in
     else
       echo "📦 Backup already exists"
     fi
-    echo "🔧 Copying fork dist → $HOMEBREW_DIST"
-    rm -rf "$HOMEBREW_DIST"
-    cp -a "$FORK_DIST" "$HOMEBREW_DIST"
+    echo "🔧 Overlaying fork JS files → $HOMEBREW_DIST"
+    # Only copy .js and .map files from the fork build (preserves control-ui, canvas-host, etc.)
+    find "$FORK_DIST" -maxdepth 1 -name '*.js' -o -name '*.map' | while read -r f; do
+      cp "$f" "$HOMEBREW_DIST/"
+    done
+    # Copy bundled hooks if present
+    if [ -d "$FORK_DIST/bundled" ]; then
+      cp -a "$FORK_DIST/bundled" "$HOMEBREW_DIST/"
+    fi
+    # Copy plugin-sdk if present
+    if [ -d "$FORK_DIST/plugin-sdk" ]; then
+      cp -a "$FORK_DIST/plugin-sdk" "$HOMEBREW_DIST/"
+    fi
     echo "✅ Fork installed. Restart gateway to apply."
     ;;
   restore)
