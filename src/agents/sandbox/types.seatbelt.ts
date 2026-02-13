@@ -9,6 +9,8 @@ export type SandboxSeatbeltProxyConfig = {
   allowedDomains: string[];
   /** Domains to deny when defaultPolicy is "allow". Supports wildcards. */
   deniedDomains: string[];
+  /** Per-agent auth token for proxy impersonation prevention. Auto-generated. */
+  token?: string;
 };
 
 export type SandboxSeatbeltConfig = {

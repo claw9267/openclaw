@@ -13,7 +13,7 @@ import { ensureSandboxContainer } from "./docker.js";
 import { createSandboxFsBridge } from "./fs-bridge.js";
 import { maybePruneSandboxes } from "./prune.js";
 import { resolveSandboxRuntimeStatus } from "./runtime-status.js";
-import { getSeatbeltProxyPort } from "./seatbelt-proxy.js";
+import { getSeatbeltProxyPort, getSeatbeltProxyToken } from "./seatbelt-proxy.js";
 import { resolveSandboxScopeKey, resolveSandboxWorkspaceDir } from "./shared.js";
 import type { SandboxContext, SandboxDockerConfig, SandboxWorkspaceInfo } from "./types.js";
 import { ensureSandboxWorkspace } from "./workspace.js";
@@ -132,8 +132,10 @@ export async function resolveSandboxContext(params: {
     const seatbelt = cfg.seatbelt ? { ...cfg.seatbelt } : undefined;
     if (seatbelt?.proxy?.enabled) {
       const livePort = getSeatbeltProxyPort();
+      const agentId = runtime.agentId;
+      const token = agentId ? getSeatbeltProxyToken(agentId) : undefined;
       if (livePort) {
-        seatbelt.proxy = { ...seatbelt.proxy, port: livePort };
+        seatbelt.proxy = { ...seatbelt.proxy, port: livePort, ...(token ? { token } : {}) };
       }
     }
     // Auto-populate seatbelt params that profiles expect

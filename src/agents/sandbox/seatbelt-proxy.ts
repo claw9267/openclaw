@@ -6,6 +6,7 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { OpenClawConfig } from "../../config/config.js";
@@ -26,6 +27,8 @@ export interface ProxyAgentPolicy {
   defaultPolicy: "allow" | "deny";
   allowedDomains: string[];
   deniedDomains: string[];
+  /** Per-agent token to prevent impersonation via proxy auth. */
+  token?: string;
 }
 
 export interface ProxyConfig {
@@ -54,10 +57,14 @@ export function buildProxyConfig(cfg: OpenClawConfig): ProxyConfig {
       continue;
     }
 
+    // Generate a per-agent token to prevent agent impersonation via proxy auth.
+    // Each agent gets a unique random token included in its proxy URL password.
+    const token = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
     agents[id] = {
       defaultPolicy: seatbelt.proxy.defaultPolicy ?? "deny",
       allowedDomains: seatbelt.proxy.allowedDomains ?? [],
       deniedDomains: seatbelt.proxy.deniedDomains ?? [],
+      token,
     };
   }
 
@@ -101,6 +108,15 @@ export async function startSeatbeltProxy(cfg: OpenClawConfig): Promise<number | 
   }
 
   const proxyConfig = buildProxyConfig(cfg);
+
+  // Store agent tokens in memory so exec code can look them up
+  const tokens: Record<string, string> = {};
+  for (const [id, policy] of Object.entries(proxyConfig.agents)) {
+    if (policy.token) {
+      tokens[id] = policy.token;
+    }
+  }
+  setAgentTokens(tokens);
 
   // Write config
   const configDir = path.dirname(PROXY_CONFIG_PATH);
@@ -218,4 +234,17 @@ export function stopSeatbeltProxy(): void {
 /** Get the current proxy port (null if not running). */
 export function getSeatbeltProxyPort(): number | null {
   return proxyPort;
+}
+
+/** In-memory map of agent tokens generated during proxy startup. */
+let agentTokens: Record<string, string> = {};
+
+/** Store the agent token map after building proxy config. */
+export function setAgentTokens(tokens: Record<string, string>): void {
+  agentTokens = tokens;
+}
+
+/** Get the proxy auth token for a specific agent. */
+export function getSeatbeltProxyToken(agentId: string): string | undefined {
+  return agentTokens[agentId];
 }

@@ -394,6 +394,7 @@ export async function runExecProcess(opts: {
               proxyPort: opts.sandbox.seatbelt?.proxy?.enabled
                 ? opts.sandbox.seatbelt.proxy.port
                 : undefined,
+              proxyToken: opts.sandbox.seatbelt?.proxy?.token,
               agentId: opts.sessionKey
                 ? (resolveAgentIdFromSessionKey(opts.sessionKey) ?? undefined)
                 : undefined,
