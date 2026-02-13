@@ -362,27 +362,6 @@ const ToolFsSchema = z
   .optional();
 
 
-export const SandboxSeatbeltProxySchema = z
-  .object({
-    enabled: z.boolean().optional(),
-    port: z.number().int().nonnegative().optional(),
-    defaultPolicy: z.union([z.literal("allow"), z.literal("deny")]).optional(),
-    allowedDomains: z.array(z.string()).optional(),
-    deniedDomains: z.array(z.string()).optional(),
-  })
-  .strict()
-  .optional();
-
-export const SandboxSeatbeltSchema = z
-  .object({
-    profile: z.string().optional(),
-    profileDir: z.string().optional(),
-    params: z.record(z.string(), z.string()).optional(),
-    proxy: SandboxSeatbeltProxySchema,
-  })
-  .strict()
-  .optional();
-
 export const AgentSandboxSchema = z
   .object({
     mode: z.union([z.literal("off"), z.literal("non-main"), z.literal("all")]).optional(),

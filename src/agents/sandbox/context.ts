@@ -92,7 +92,7 @@ export async function resolveSandboxContext(params: {
   if (!resolved) {
     return null;
   }
-  const { rawSessionKey, cfg } = resolved;
+  const { rawSessionKey, runtime, cfg } = resolved;
 
   await maybePruneSandboxes(cfg);
 
@@ -206,7 +206,7 @@ export async function ensureSandboxWorkspaceForSession(params: {
   if (!resolved) {
     return null;
   }
-  const { rawSessionKey, cfg } = resolved;
+  const { rawSessionKey, runtime, cfg } = resolved;
 
   const { workspaceDir } = await ensureSandboxWorkspaceLayout({
     cfg,

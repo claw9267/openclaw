@@ -487,6 +487,7 @@ export type ToolsConfig = {
     model?: string | { primary?: string; fallbacks?: string[] };
     tools?: {
       allow?: string[];
+      alsoAllow?: string[];
       deny?: string[];
     };
   };

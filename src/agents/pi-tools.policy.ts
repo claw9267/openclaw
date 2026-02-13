@@ -84,8 +84,23 @@ export function resolveSubagentToolPolicy(cfg?: OpenClawConfig, depth?: number):
   const configured = cfg?.tools?.subagents?.tools;
   const maxSpawnDepth = cfg?.agents?.defaults?.subagents?.maxSpawnDepth ?? 1;
   const effectiveDepth = typeof depth === "number" && depth >= 0 ? depth : 1;
+
+  // Explicit allow/alsoAllow can override DEFAULT deny (conscious admin choice),
+  // but user-configured deny always wins.
+  const explicitOverrides = new Set<string>(
+    [
+      ...(Array.isArray(configured?.allow) ? configured.allow : []),
+      ...(Array.isArray(configured?.alsoAllow) ? configured.alsoAllow : []),
+    ].map(normalizeToolName),
+  );
+
   const baseDeny = resolveSubagentDenyList(effectiveDepth, maxSpawnDepth);
-  const deny = [...baseDeny, ...(Array.isArray(configured?.deny) ? configured.deny : [])];
+  const filteredDeny =
+    explicitOverrides.size > 0
+      ? baseDeny.filter((t) => !explicitOverrides.has(normalizeToolName(t)))
+      : baseDeny;
+
+  const deny = [...filteredDeny, ...(Array.isArray(configured?.deny) ? configured.deny : [])];
   const allow = Array.isArray(configured?.allow) ? configured.allow : undefined;
   return { allow, deny };
 }
