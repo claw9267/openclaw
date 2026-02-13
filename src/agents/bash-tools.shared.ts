@@ -103,7 +103,16 @@ export function buildSeatbeltExecArgs(params: {
 
   // Build env export prefix for the shell command
   const envParts: string[] = [];
-  for (const [key, value] of Object.entries(params.env)) {
+
+  // For seatbelt, HOME should be the real home dir so tools (e.g. Claude Code)
+  // can find macOS Keychain credentials. The seatbelt profile controls actual
+  // read/write permissions, not the HOME env var.
+  const env = { ...params.env };
+  if (process.env.HOME) {
+    env.HOME = process.env.HOME;
+  }
+
+  for (const [key, value] of Object.entries(env)) {
     // Escape single quotes in values
     const escaped = value.replace(/'/g, "'\\''");
     envParts.push(`export ${key}='${escaped}';`);
