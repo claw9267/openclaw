@@ -9,6 +9,7 @@ const {
   enableTailscaleServe,
   disableTailscaleServe,
   ensureFunnel,
+  enableTailscaleFunnel,
 } = tailscale;
 const tailscaleBin = expect.stringMatching(/tailscale$/i);
 
@@ -216,5 +217,32 @@ describe("tailscale helpers", () => {
     await expect(enableTailscaleServe(3000, exec as never)).rejects.toBe(originalError);
 
     expect(exec).toHaveBeenCalledTimes(2);
+  });
+
+
+  it("enableTailscaleServe passes https+insecure URL when tlsEnabled", async () => {
+    const exec = vi.fn().mockResolvedValue({ stdout: "" });
+
+    await enableTailscaleServe(3000, exec as never, true);
+
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(exec).toHaveBeenCalledWith(
+      tailscaleBin,
+      expect.arrayContaining(["serve", "--bg", "--yes", "https+insecure://127.0.0.1:3000"]),
+      expect.any(Object),
+    );
+  });
+
+  it("enableTailscaleFunnel passes https+insecure URL when tlsEnabled", async () => {
+    const exec = vi.fn().mockResolvedValue({ stdout: "" });
+
+    await enableTailscaleFunnel(3000, exec as never, true);
+
+    expect(exec).toHaveBeenCalledTimes(1);
+    expect(exec).toHaveBeenCalledWith(
+      tailscaleBin,
+      expect.arrayContaining(["funnel", "--bg", "--yes", "https+insecure://127.0.0.1:3000"]),
+      expect.any(Object),
+    );
   });
 });
