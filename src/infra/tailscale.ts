@@ -389,9 +389,10 @@ export async function ensureFunnel(
   }
 }
 
-export async function enableTailscaleServe(port: number, exec: typeof runExec = runExec) {
+export async function enableTailscaleServe(port: number, exec: typeof runExec = runExec, tlsEnabled = false) {
   const tailscaleBin = await getTailscaleBinary();
-  await execWithSudoFallback(exec, tailscaleBin, ["serve", "--bg", "--yes", `${port}`], {
+  const target = tlsEnabled ? `https+insecure://127.0.0.1:${port}` : `${port}`;
+  await execWithSudoFallback(exec, tailscaleBin, ["serve", "--bg", "--yes", target], {
     maxBuffer: 200_000,
     timeoutMs: 15_000,
   });
@@ -405,9 +406,10 @@ export async function disableTailscaleServe(exec: typeof runExec = runExec) {
   });
 }
 
-export async function enableTailscaleFunnel(port: number, exec: typeof runExec = runExec) {
+export async function enableTailscaleFunnel(port: number, exec: typeof runExec = runExec, tlsEnabled = false) {
   const tailscaleBin = await getTailscaleBinary();
-  await execWithSudoFallback(exec, tailscaleBin, ["funnel", "--bg", "--yes", `${port}`], {
+  const target = tlsEnabled ? `https+insecure://127.0.0.1:${port}` : `${port}`;
+  await execWithSudoFallback(exec, tailscaleBin, ["funnel", "--bg", "--yes", target], {
     maxBuffer: 200_000,
     timeoutMs: 15_000,
   });

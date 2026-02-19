@@ -25,6 +25,10 @@ vi.mock("../gateway/net.js", () => ({
   pickPrimaryLanIPv4,
 }));
 
+vi.mock("../infra/tls/gateway.js", () => ({
+  loadGatewayTlsRuntime: vi.fn().mockResolvedValue(undefined),
+}));
+
 const { resolveGatewayConnection } = await import("./gateway-chat.js");
 
 describe("resolveGatewayConnection", () => {
@@ -57,7 +61,7 @@ describe("resolveGatewayConnection", () => {
   it("throws when url override is missing explicit credentials", () => {
     loadConfig.mockReturnValue({ gateway: { mode: "local" } });
 
-    expect(() => resolveGatewayConnection({ url: "wss://override.example/ws" })).toThrow(
+    await expect(resolveGatewayConnection({ url: "wss://override.example/ws" })).rejects.toThrow(
       "explicit credentials",
     );
   });
@@ -65,7 +69,7 @@ describe("resolveGatewayConnection", () => {
   it("uses explicit token when url override is set", () => {
     loadConfig.mockReturnValue({ gateway: { mode: "local" } });
 
-    const result = resolveGatewayConnection({
+    const result = await resolveGatewayConnection({
       url: "wss://override.example/ws",
       token: "explicit-token",
     });
@@ -74,13 +78,14 @@ describe("resolveGatewayConnection", () => {
       url: "wss://override.example/ws",
       token: "explicit-token",
       password: undefined,
+      tlsFingerprint: undefined,
     });
   });
 
   it("uses explicit password when url override is set", () => {
     loadConfig.mockReturnValue({ gateway: { mode: "local" } });
 
-    const result = resolveGatewayConnection({
+    const result = await resolveGatewayConnection({
       url: "wss://override.example/ws",
       password: "explicit-password",
     });
@@ -89,6 +94,7 @@ describe("resolveGatewayConnection", () => {
       url: "wss://override.example/ws",
       token: undefined,
       password: "explicit-password",
+      tlsFingerprint: undefined,
     });
   });
 
@@ -97,7 +103,7 @@ describe("resolveGatewayConnection", () => {
     resolveGatewayPort.mockReturnValue(18800);
     pickPrimaryTailnetIPv4.mockReturnValue("100.64.0.1");
 
-    const result = resolveGatewayConnection({});
+    const result = await resolveGatewayConnection({});
 
     expect(result.url).toBe("ws://100.64.0.1:18800");
   });
@@ -107,7 +113,7 @@ describe("resolveGatewayConnection", () => {
     resolveGatewayPort.mockReturnValue(18800);
     pickPrimaryLanIPv4.mockReturnValue("192.168.1.42");
 
-    const result = resolveGatewayConnection({});
+    const result = await resolveGatewayConnection({});
 
     expect(result.url).toBe("ws://192.168.1.42:18800");
   });

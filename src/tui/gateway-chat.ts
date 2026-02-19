@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { loadConfig } from "../config/config.js";
+import { loadGatewayTlsRuntime } from "../infra/tls/gateway.js";
 import {
   buildGatewayConnectionDetails,
   ensureExplicitGatewayAuth,
@@ -21,6 +22,7 @@ export type GatewayConnectionOptions = {
   url?: string;
   token?: string;
   password?: string;
+  tlsFingerprint?: string;
 };
 
 export type ChatSendOptions = {
@@ -102,13 +104,17 @@ export class GatewayChatClient {
   readonly connection: { url: string; token?: string; password?: string };
   hello?: HelloOk;
 
+  static async create(opts: GatewayConnectionOptions): Promise<GatewayChatClient> {
+    const resolved = await resolveGatewayConnection(opts);
+    return new GatewayChatClient(resolved);
+  }
+
   onEvent?: (evt: GatewayEvent) => void;
   onConnected?: () => void;
   onDisconnected?: (reason: string) => void;
   onGap?: (info: { expected: number; received: number }) => void;
 
-  constructor(opts: GatewayConnectionOptions) {
-    const resolved = resolveGatewayConnection(opts);
+  private constructor(resolved: { url: string; token?: string; password?: string; tlsFingerprint?: string }) {
     this.connection = resolved;
 
     this.readyPromise = new Promise((resolve) => {
@@ -119,6 +125,7 @@ export class GatewayChatClient {
       url: resolved.url,
       token: resolved.token,
       password: resolved.password,
+      tlsFingerprint: resolved.tlsFingerprint,
       clientName: GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT,
       clientDisplayName: "openclaw-tui",
       clientVersion: VERSION,
@@ -225,11 +232,12 @@ export class GatewayChatClient {
   }
 }
 
-export function resolveGatewayConnection(opts: GatewayConnectionOptions) {
+export async function resolveGatewayConnection(opts: GatewayConnectionOptions) {
   const config = loadConfig();
   const isRemoteMode = config.gateway?.mode === "remote";
   const remote = isRemoteMode ? config.gateway?.remote : undefined;
   const authToken = config.gateway?.auth?.token;
+  const remoteUrl = remote?.url;
 
   const urlOverride =
     typeof opts.url === "string" && opts.url.trim().length > 0 ? opts.url.trim() : undefined;
@@ -243,6 +251,17 @@ export function resolveGatewayConnection(opts: GatewayConnectionOptions) {
     config,
     ...(urlOverride ? { url: urlOverride } : {}),
   }).url;
+
+  const useLocalTls =
+    config.gateway?.tls?.enabled === true && !urlOverride && !remoteUrl && url.startsWith("wss://");
+  const tlsRuntime = useLocalTls ? await loadGatewayTlsRuntime(config.gateway?.tls) : undefined;
+  const remoteTlsFingerprint =
+    isRemoteMode && !urlOverride && remoteUrl && typeof remote?.tlsFingerprint === "string"
+      ? remote.tlsFingerprint.trim()
+      : undefined;
+  const tlsFingerprint =
+    remoteTlsFingerprint ||
+    (tlsRuntime?.enabled ? tlsRuntime.fingerprintSha256 : undefined);
 
   const token =
     explicitAuth.token ||
@@ -266,5 +285,5 @@ export function resolveGatewayConnection(opts: GatewayConnectionOptions) {
           : undefined)
       : undefined);
 
-  return { url, token, password };
+  return { url, token, password, tlsFingerprint };
 }
