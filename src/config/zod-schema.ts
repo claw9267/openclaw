@@ -737,6 +737,12 @@ export const OpenClawSchema = z
       })
       .strict()
       .optional(),
+    workspace: z
+      .object({
+        bootstrapExclude: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
     plugins: z
       .object({
         enabled: z.boolean().optional(),

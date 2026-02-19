@@ -8,6 +8,8 @@ import {
   resolveBootstrapTotalMaxChars,
 } from "./pi-embedded-helpers.js";
 import {
+  DEFAULT_MEMORY_ALT_FILENAME,
+  DEFAULT_MEMORY_FILENAME,
   filterBootstrapFilesForSession,
   loadWorkspaceBootstrapFiles,
   type WorkspaceBootstrapFile,
@@ -50,13 +52,39 @@ export async function resolveBootstrapFilesForRun(params: {
   warn?: (message: string) => void;
 }): Promise<WorkspaceBootstrapFile[]> {
   const sessionKey = params.sessionKey ?? params.sessionId;
+
   const rawFiles = params.sessionKey
     ? await getOrLoadBootstrapFiles({
         workspaceDir: params.workspaceDir,
         sessionKey: params.sessionKey,
       })
     : await loadWorkspaceBootstrapFiles(params.workspaceDir);
-  const bootstrapFiles = filterBootstrapFilesForSession(rawFiles, sessionKey);
+
+  let bootstrapFiles = filterBootstrapFilesForSession(rawFiles, sessionKey);
+
+  // 1. Auto-skip memory files when memory plugin is disabled
+  const memorySlot = params.config?.plugins?.slots?.memory;
+  const skipMemoryFiles = memorySlot === "none";
+
+  // 2. Config-driven excludes
+  const configExcludes = new Set(
+    Array.isArray(params.config?.workspace?.bootstrapExclude)
+      ? params.config.workspace.bootstrapExclude.map((f: string) => f.trim()).filter(Boolean)
+      : [],
+  );
+
+  // 3. Filter
+  if (skipMemoryFiles || configExcludes.size > 0) {
+    const MEMORY_NAMES: ReadonlySet<string> = new Set([
+      DEFAULT_MEMORY_FILENAME,
+      DEFAULT_MEMORY_ALT_FILENAME,
+    ]);
+    bootstrapFiles = bootstrapFiles.filter((file) => {
+      if (skipMemoryFiles && MEMORY_NAMES.has(file.name)) return false;
+      if (configExcludes.has(file.name)) return false;
+      return true;
+    });
+  }
 
   const updated = await applyBootstrapHookOverrides({
     files: bootstrapFiles,
@@ -66,8 +94,10 @@ export async function resolveBootstrapFilesForRun(params: {
     sessionId: params.sessionId,
     agentId: params.agentId,
   });
+
   return sanitizeBootstrapFiles(updated, params.warn);
 }
+
 
 export async function resolveBootstrapContextForRun(params: {
   workspaceDir: string;
