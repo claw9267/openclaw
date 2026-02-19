@@ -7,6 +7,8 @@ import {
   resolveBootstrapTotalMaxChars,
 } from "./pi-embedded-helpers.js";
 import {
+  DEFAULT_MEMORY_ALT_FILENAME,
+  DEFAULT_MEMORY_FILENAME,
   filterBootstrapFilesForSession,
   loadWorkspaceBootstrapFiles,
   type WorkspaceBootstrapFile,
@@ -30,10 +32,34 @@ export async function resolveBootstrapFilesForRun(params: {
   agentId?: string;
 }): Promise<WorkspaceBootstrapFile[]> {
   const sessionKey = params.sessionKey ?? params.sessionId;
-  const bootstrapFiles = filterBootstrapFilesForSession(
+  let bootstrapFiles = filterBootstrapFilesForSession(
     await loadWorkspaceBootstrapFiles(params.workspaceDir),
     sessionKey,
   );
+
+  // 1. Auto-skip memory files when memory plugin is disabled
+  const memorySlot = params.config?.plugins?.slots?.memory;
+  const skipMemoryFiles = memorySlot === "none";
+
+  // 2. Config-driven excludes
+  const configExcludes = new Set(
+    Array.isArray(params.config?.workspace?.bootstrapExclude)
+      ? params.config.workspace.bootstrapExclude.map((f: string) => f.trim()).filter(Boolean)
+      : [],
+  );
+
+  // 3. Filter
+  if (skipMemoryFiles || configExcludes.size > 0) {
+    const MEMORY_NAMES: ReadonlySet<string> = new Set([
+      DEFAULT_MEMORY_FILENAME,
+      DEFAULT_MEMORY_ALT_FILENAME,
+    ]);
+    bootstrapFiles = bootstrapFiles.filter((file) => {
+      if (skipMemoryFiles && MEMORY_NAMES.has(file.name)) return false;
+      if (configExcludes.has(file.name)) return false;
+      return true;
+    });
+  }
 
   return applyBootstrapHookOverrides({
     files: bootstrapFiles,
