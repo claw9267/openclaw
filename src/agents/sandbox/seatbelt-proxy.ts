@@ -5,7 +5,7 @@
  * for seatbelt-sandboxed sessions. The proxy runs as a child process of the gateway.
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, execSync, type ChildProcess } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -18,6 +18,7 @@ const log = createSubsystemLogger("seatbelt-proxy");
 
 const PROXY_SCRIPT = path.join(STATE_DIR, "seatbelt-proxy", "proxy.mjs");
 const PROXY_CONFIG_PATH = path.join(STATE_DIR, "seatbelt-proxy", "config.json");
+const PROXY_PID_PATH = path.join(STATE_DIR, "seatbelt-proxy", "proxy.pid");
 const DEFAULT_PROXY_PORT = 18790;
 
 let proxyProcess: ChildProcess | null = null;
@@ -81,6 +82,71 @@ export function buildProxyConfig(cfg: OpenClawConfig): ProxyConfig {
 }
 
 /**
+ * Kill any process listening on the given port.
+ * Uses lsof to find PIDs, escalates from SIGTERM to SIGKILL.
+ * Returns true if the port was freed.
+ */
+function killProcessOnPort(port: number): boolean {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const pid = execSync(`lsof -ti tcp:${port} -s tcp:listen`, {
+        encoding: "utf-8",
+        timeout: 3000,
+      }).trim();
+      if (!pid) return true; // port is free
+      const signal = attempt < 2 ? "SIGTERM" : "SIGKILL";
+      for (const p of pid.split("\n").filter(Boolean)) {
+        try {
+          process.kill(parseInt(p, 10), signal);
+        } catch {
+          // already dead
+        }
+      }
+      log.info?.(`killed orphaned proxy on port ${port} (pid ${pid}, ${signal})`);
+      // Wait for process to release the port
+      const waitMs = signal === "SIGKILL" ? 200 : 1000;
+      const deadline = Date.now() + waitMs;
+      while (Date.now() < deadline) {
+        // busy-wait (sync context, short duration)
+      }
+    } catch {
+      return true; // lsof found nothing — port is free
+    }
+  }
+  // Final check
+  try {
+    execSync(`lsof -ti tcp:${port} -s tcp:listen`, { encoding: "utf-8", timeout: 2000 });
+    return false; // still occupied
+  } catch {
+    return true; // port is free
+  }
+}
+
+/**
+ * Kill the proxy identified by PID file, if it exists.
+ */
+function killProxyByPidFile(): void {
+  try {
+    if (!fs.existsSync(PROXY_PID_PATH)) return;
+    const pid = parseInt(fs.readFileSync(PROXY_PID_PATH, "utf-8").trim(), 10);
+    if (isNaN(pid)) return;
+    try {
+      process.kill(pid, "SIGTERM");
+      log.info?.(`killed proxy from PID file (pid ${pid})`);
+    } catch {
+      // already dead
+    }
+    try {
+      fs.unlinkSync(PROXY_PID_PATH);
+    } catch {
+      // ignore
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/**
  * Write proxy config and start the proxy process.
  * Returns the port the proxy is listening on.
  */
@@ -124,34 +190,11 @@ export async function startSeatbeltProxy(cfg: OpenClawConfig): Promise<number | 
   fs.mkdirSync(proxyConfig.logDir!, { recursive: true });
   fs.writeFileSync(PROXY_CONFIG_PATH, JSON.stringify(proxyConfig, null, 2));
 
-  // Kill any orphaned proxy on the configured port (handles SIGUSR1 hot-reloads
-  // where the old child process outlives the module state)
+  // Kill any orphaned proxy on the configured port
   if (proxyConfig.port > 0) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const { execSync } = await import("node:child_process");
-        const pid = execSync(`lsof -ti tcp:${proxyConfig.port} -s tcp:listen`, {
-          encoding: "utf-8",
-          timeout: 3000,
-        }).trim();
-        if (pid) {
-          for (const p of pid.split("\n").filter(Boolean)) {
-            try {
-              process.kill(parseInt(p, 10), attempt < 2 ? "SIGTERM" : "SIGKILL");
-            } catch {
-              // already dead
-            }
-          }
-          log.info?.(
-            `killed orphaned proxy on port ${proxyConfig.port} (pid ${pid}, attempt ${attempt + 1})`,
-          );
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        } else {
-          break; // port is free
-        }
-      } catch {
-        break; // lsof found nothing — port is free
-      }
+    killProxyByPidFile();
+    if (!killProcessOnPort(proxyConfig.port)) {
+      log.warn?.(`failed to free port ${proxyConfig.port} — proxy may not start`);
     }
   }
 
@@ -162,6 +205,15 @@ export async function startSeatbeltProxy(cfg: OpenClawConfig): Promise<number | 
   });
 
   proxyProcess = child;
+
+  // Write PID file for orphan cleanup on next restart
+  if (child.pid) {
+    try {
+      fs.writeFileSync(PROXY_PID_PATH, String(child.pid), "utf-8");
+    } catch {
+      // non-fatal
+    }
+  }
 
   // Capture port from stdout (proxy emits PORT=NNNNN when auto-assigning)
   return new Promise<number | null>((resolve) => {
@@ -201,6 +253,7 @@ export async function startSeatbeltProxy(cfg: OpenClawConfig): Promise<number | 
       log.info?.(`proxy exited with code ${code}`);
       proxyProcess = null;
       proxyPort = null;
+      try { fs.unlinkSync(PROXY_PID_PATH); } catch { /* ignore */ }
       if (!resolved) {
         resolved = true;
         resolve(null);
@@ -218,8 +271,9 @@ export async function startSeatbeltProxy(cfg: OpenClawConfig): Promise<number | 
   });
 }
 
-/** Stop the proxy process. */
+/** Stop the proxy process (in-memory reference + PID file + port orphan cleanup). */
 export function stopSeatbeltProxy(): void {
+  // 1. Kill in-memory child process
   if (proxyProcess) {
     try {
       proxyProcess.kill("SIGTERM");
@@ -229,6 +283,8 @@ export function stopSeatbeltProxy(): void {
     proxyProcess = null;
     proxyPort = null;
   }
+  // 2. Kill by PID file (catches orphans from crashed gateway)
+  killProxyByPidFile();
 }
 
 /** Get the current proxy port (null if not running). */
