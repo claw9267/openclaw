@@ -121,4 +121,48 @@ describe("resolveSandboxConfigForAgent (seatbelt)", () => {
     expect(sandbox.seatbelt.profile).toBe("demo-open");
     expect(sandbox.seatbelt.params).toEqual({ ALPHA: "global" });
   });
+
+  it("inherits seatbelt.profile from defaults for agent backend override", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        defaults: {
+          sandbox: {
+            mode: "all",
+            backend: "seatbelt",
+            seatbelt: {
+              profile: "demo-open",
+            },
+          },
+        },
+        list: [
+          {
+            id: "worker",
+            sandbox: {
+              backend: "seatbelt",
+            },
+          },
+        ],
+      },
+    };
+
+    const sandbox = resolveSandboxConfigForAgent(cfg, "worker");
+    expect(sandbox.backend).toBe("seatbelt");
+    expect(sandbox.seatbelt.profile).toBe("demo-open");
+  });
+
+  it("throws when seatbelt backend has no merged profile", () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        defaults: {
+          sandbox: {
+            mode: "all",
+            backend: "seatbelt",
+          },
+        },
+      },
+    };
+
+    expect(() => resolveSandboxConfigForAgent(cfg, "main")).toThrow(/sandbox.seatbelt.profile/);
+  });
+
 });

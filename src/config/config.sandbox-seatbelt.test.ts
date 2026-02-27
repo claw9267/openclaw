@@ -38,7 +38,7 @@ describe("sandbox seatbelt config", () => {
     }
   });
 
-  it("requires seatbelt.profile when backend=seatbelt", () => {
+  it("allows seatbelt backend without profile at parse time", () => {
     const res = validateConfigObject({
       agents: {
         defaults: {
@@ -49,16 +49,32 @@ describe("sandbox seatbelt config", () => {
       },
     });
 
-    expect(res.ok).toBe(false);
-    if (!res.ok) {
-      expect(
-        res.issues.some(
-          (issue) =>
-            issue.path.includes("seatbelt.profile") || issue.message.includes("seatbelt.profile"),
-        ),
-      ).toBe(true);
-      expect(res.issues.some((issue) => issue.message.includes("openclaw doctor"))).toBe(true);
-    }
+    expect(res.ok).toBe(true);
+  });
+
+  it("allows agent seatbelt backend to inherit profile from defaults", () => {
+    const res = validateConfigObject({
+      agents: {
+        defaults: {
+          sandbox: {
+            backend: "seatbelt",
+            seatbelt: {
+              profile: "demo-open",
+            },
+          },
+        },
+        list: [
+          {
+            id: "worker",
+            sandbox: {
+              backend: "seatbelt",
+            },
+          },
+        ],
+      },
+    });
+
+    expect(res.ok).toBe(true);
   });
 
   it("rejects seatbelt backend on non-darwin platforms", () => {

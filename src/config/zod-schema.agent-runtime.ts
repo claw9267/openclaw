@@ -494,17 +494,9 @@ export const AgentSandboxSchema = z
   .superRefine((data, ctx) => {
     const backend = data.backend ?? "docker";
     if (backend === "seatbelt") {
-      const profile = data.seatbelt?.profile?.trim();
-      if (!profile) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["seatbelt", "profile"],
-          message:
-            'Seatbelt sandbox requires sandbox.seatbelt.profile when sandbox.backend="seatbelt". ' +
-            'Example: sandbox: { backend: "seatbelt", seatbelt: { profile: "demo-open" } }. ' +
-            "Run `openclaw doctor` to validate and repair config issues.",
-        });
-      }
+      // Do not require seatbelt.profile at parse time: agent-specific sandbox config may
+      // intentionally inherit profile from defaults. Enforce after merge in
+      // resolveSandboxConfigForAgent().
       if (process.platform !== "darwin") {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

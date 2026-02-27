@@ -128,10 +128,37 @@ async function resolveSeatbeltContextConfig(params: {
   }
   const profile = rawProfile.endsWith(".sb") ? rawProfile.slice(0, -3) : rawProfile;
   const profileFile = `${profile}.sb`;
+  const profilePath = path.join(params.cfg.seatbelt.profileDir, profileFile);
 
-  await ensureSeatbeltDemoProfiles({
-    profileDir: params.cfg.seatbelt.profileDir,
-  });
+  const hasProfile = async () => {
+    try {
+      await fs.access(profilePath);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  if (!(await hasProfile())) {
+    let ensureError: unknown;
+    try {
+      await ensureSeatbeltDemoProfiles({
+        profileDir: params.cfg.seatbelt.profileDir,
+      });
+    } catch (error) {
+      ensureError = error;
+    }
+
+    if (!(await hasProfile())) {
+      const help =
+        `Seatbelt profile "${profile}" not found at ${profilePath}. ` +
+        "Set sandbox.seatbelt.profile/profileDir to an existing profile, or run `openclaw doctor`.";
+      if (ensureError) {
+        throw new Error(help + ` Auto-install attempt failed: ${String(ensureError)}.`);
+      }
+      throw new Error(help);
+    }
+  }
 
   const defaults = {
     PROJECT_DIR: params.workspaceDir,
@@ -146,7 +173,7 @@ async function resolveSeatbeltContextConfig(params: {
   return {
     profileDir: params.cfg.seatbelt.profileDir,
     profile,
-    profilePath: path.join(params.cfg.seatbelt.profileDir, profileFile),
+    profilePath,
     params: {
       ...defaults,
       ...(params.cfg.seatbelt.params ?? {}),
