@@ -246,7 +246,7 @@ export function resolveSandboxConfigForAgent(
     }),
   };
 
-  if (resolved.backend === "seatbelt" && !resolved.seatbelt.profile?.trim()) {
+  if (resolved.backend === "seatbelt" && !resolved.seatbelt?.profile?.trim()) {
     const scopedAgentId = agentId?.trim() || "main";
     throw new Error(
       `Seatbelt sandbox requires sandbox.seatbelt.profile after defaults/agent merge for agent "${scopedAgentId}". Set agents.defaults.sandbox.seatbelt.profile or an agent-specific override.`,

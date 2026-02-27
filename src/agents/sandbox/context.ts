@@ -1,3 +1,4 @@
+import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_BROWSER_EVALUATE_ENABLED } from "../../browser/constants.js";
@@ -130,16 +131,26 @@ async function resolveSeatbeltContextConfig(params: {
   const profileFile = `${profile}.sb`;
   const profilePath = path.join(params.cfg.seatbelt.profileDir, profileFile);
 
-  const hasProfile = async () => {
+  const getProfileState = async (): Promise<"ok" | "missing" | "unreadable"> => {
     try {
-      await fs.access(profilePath);
-      return true;
-    } catch {
-      return false;
+      await fs.access(profilePath, fsConstants.R_OK);
+      return "ok";
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | undefined)?.code;
+      return code === "ENOENT" ? "missing" : "unreadable";
     }
   };
 
-  if (!(await hasProfile())) {
+  const unreadableMessage =
+    `Seatbelt profile "${profile}" exists but is not readable at ${profilePath}. ` +
+    "Check file ownership and permissions.";
+
+  const initialState = await getProfileState();
+  if (initialState !== "ok") {
+    if (initialState === "unreadable") {
+      throw new Error(unreadableMessage);
+    }
+
     const isDemoProfile = SEATBELT_DEMO_PROFILE_NAMES.includes(
       profile as (typeof SEATBELT_DEMO_PROFILE_NAMES)[number],
     );
@@ -155,12 +166,23 @@ async function resolveSeatbeltContextConfig(params: {
       }
     }
 
-    if (!(await hasProfile())) {
+    const finalState = await getProfileState();
+    if (finalState !== "ok") {
+      if (finalState === "unreadable") {
+        throw new Error(unreadableMessage);
+      }
+
       const help =
         `Seatbelt profile "${profile}" not found at ${profilePath}. ` +
         "Set sandbox.seatbelt.profile/profileDir to an existing profile, or run `openclaw doctor`.";
       if (ensureError) {
-        throw new Error(help + ` Auto-install attempt failed: ${String(ensureError)}.`);
+        const message = ensureError instanceof Error ? ensureError.message : String(ensureError);
+        const wrapped = new Error(help + ` Auto-install attempt failed: ${message}.`);
+        (wrapped as Error & { cause?: unknown }).cause = ensureError;
+        throw wrapped;
+      }
+      if (isDemoProfile) {
+        throw new Error(help + " Demo profile auto-install was attempted but profile is still missing.");
       }
       throw new Error(help);
     }

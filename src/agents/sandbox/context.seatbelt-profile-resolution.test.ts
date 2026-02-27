@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { OpenClawConfig } from "../../config/config.js";
 import { resolveSandboxContext } from "./context.js";
 
+const describeSeatbelt = process.platform === "darwin" ? describe : describe.skip;
+
 function createSeatbeltConfig(params: {
   profileDir: string;
   profile: string;
@@ -27,7 +29,7 @@ function createSeatbeltConfig(params: {
   } as OpenClawConfig;
 }
 
-describe("resolveSeatbeltContextConfig profile handling", () => {
+describeSeatbelt("resolveSeatbeltContextConfig profile handling", () => {
   const cleanupPaths: string[] = [];
 
   afterEach(async () => {
@@ -89,5 +91,23 @@ describe("resolveSeatbeltContextConfig profile handling", () => {
 
     const profileDirEntries = await fs.readdir(profileDir);
     expect(profileDirEntries).toEqual([]);
+  });
+
+  it("throws a distinct unreadable-profile error", async () => {
+    const profileDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-seatbelt-profile-unreadable-"));
+    const workspaceDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-seatbelt-work-"));
+    cleanupPaths.push(profileDir, workspaceDir);
+
+    const profilePath = path.join(profileDir, "private.sb");
+    await fs.writeFile(profilePath, '(version 1)\n(allow default)\n', "utf8");
+    await fs.chmod(profilePath, 0o000);
+
+    await expect(
+      resolveSandboxContext({
+        config: createSeatbeltConfig({ profileDir, profile: "private" }),
+        sessionKey: "agent:main:main",
+        workspaceDir,
+      }),
+    ).rejects.toThrow(/exists but is not readable/);
   });
 });
