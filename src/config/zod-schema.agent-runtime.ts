@@ -198,6 +198,15 @@ export const SandboxDockerSchema = z
   })
   .optional();
 
+export const SandboxSeatbeltSchema = z
+  .object({
+    profileDir: z.string().optional(),
+    profile: z.string().optional(),
+    params: z.record(z.string(), z.string()).optional(),
+  })
+  .strict()
+  .optional();
+
 export const SandboxBrowserSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -475,12 +484,39 @@ export const AgentSandboxSchema = z
     scope: z.union([z.literal("session"), z.literal("agent"), z.literal("shared")]).optional(),
     perSession: z.boolean().optional(),
     workspaceRoot: z.string().optional(),
+    backend: z.union([z.literal("docker"), z.literal("seatbelt")]).optional(),
+    seatbelt: SandboxSeatbeltSchema,
     docker: SandboxDockerSchema,
     browser: SandboxBrowserSchema,
     prune: SandboxPruneSchema,
   })
   .strict()
   .superRefine((data, ctx) => {
+    const backend = data.backend ?? "docker";
+    if (backend === "seatbelt") {
+      const profile = data.seatbelt?.profile?.trim();
+      if (!profile) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["seatbelt", "profile"],
+          message:
+            'Seatbelt sandbox requires sandbox.seatbelt.profile when sandbox.backend="seatbelt". ' +
+            'Example: sandbox: { backend: "seatbelt", seatbelt: { profile: "demo-open" } }. ' +
+            "Run `openclaw doctor` to validate and repair config issues.",
+        });
+      }
+      if (process.platform !== "darwin") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["backend"],
+          message:
+            "Seatbelt sandbox backend is only supported on macOS (darwin). Current platform: " +
+            process.platform +
+            ". Run `openclaw doctor` for remediation guidance.",
+        });
+      }
+    }
+
     const blockedBrowserNetworkReason = getBlockedNetworkModeReason({
       network: data.browser?.network,
       allowContainerNamespaceJoin: data.docker?.dangerouslyAllowContainerNamespaceJoin === true,
