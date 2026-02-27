@@ -1,8 +1,9 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 import { DEFAULT_BROWSER_EVALUATE_ENABLED } from "../../browser/constants.js";
 import { ensureBrowserControlAuth, resolveBrowserControlAuth } from "../../browser/control-auth.js";
 import type { OpenClawConfig } from "../../config/config.js";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig, STATE_DIR } from "../../config/config.js";
 import { defaultRuntime } from "../../runtime.js";
 import { resolveUserPath } from "../../utils.js";
 import { syncSkillsToWorkspace } from "../skills.js";
@@ -14,7 +15,12 @@ import { createSandboxFsBridge } from "./fs-bridge.js";
 import { maybePruneSandboxes } from "./prune.js";
 import { resolveSandboxRuntimeStatus } from "./runtime-status.js";
 import { resolveSandboxScopeKey, resolveSandboxWorkspaceDir } from "./shared.js";
-import type { SandboxContext, SandboxDockerConfig, SandboxWorkspaceInfo } from "./types.js";
+import type {
+  SandboxContext,
+  SandboxDockerConfig,
+  SandboxSeatbeltContext,
+  SandboxWorkspaceInfo,
+} from "./types.js";
 import { ensureSandboxWorkspace } from "./workspace.js";
 
 async function ensureSandboxWorkspaceLayout(params: {
@@ -105,6 +111,43 @@ function resolveSandboxSession(params: { config?: OpenClawConfig; sessionKey?: s
   return { rawSessionKey, runtime, cfg };
 }
 
+function resolveSeatbeltContextConfig(params: {
+  cfg: ReturnType<typeof resolveSandboxConfigForAgent>;
+  workspaceDir: string;
+  agentWorkspaceDir: string;
+  agentId: string;
+}): SandboxSeatbeltContext | undefined {
+  if (params.cfg.backend !== "seatbelt") {
+    return undefined;
+  }
+  const rawProfile = params.cfg.seatbelt.profile?.trim();
+  if (!rawProfile) {
+    return undefined;
+  }
+  const profile = rawProfile.endsWith(".sb") ? rawProfile.slice(0, -3) : rawProfile;
+  const profileFile = `${profile}.sb`;
+
+  const defaults = {
+    PROJECT_DIR: params.workspaceDir,
+    WORKSPACE_DIR: params.agentWorkspaceDir,
+    STATE_DIR,
+    AGENT_ID: params.agentId,
+    SEATBELT_PROFILE_DIR: params.cfg.seatbelt.profileDir,
+    WORKSPACE_ACCESS: params.cfg.workspaceAccess,
+    TMPDIR: "/tmp",
+  };
+
+  return {
+    profileDir: params.cfg.seatbelt.profileDir,
+    profile,
+    profilePath: path.join(params.cfg.seatbelt.profileDir, profileFile),
+    params: {
+      ...defaults,
+      ...(params.cfg.seatbelt.params ?? {}),
+    },
+  };
+}
+
 export async function resolveSandboxContext(params: {
   config?: OpenClawConfig;
   sessionKey?: string;
@@ -114,9 +157,11 @@ export async function resolveSandboxContext(params: {
   if (!resolved) {
     return null;
   }
-  const { rawSessionKey, cfg } = resolved;
+  const { rawSessionKey, cfg, runtime } = resolved;
 
-  await maybePruneSandboxes(cfg);
+  if (cfg.backend === "docker") {
+    await maybePruneSandboxes(cfg);
+  }
 
   const { agentWorkspaceDir, scopeKey, workspaceDir } = await ensureSandboxWorkspaceLayout({
     cfg,
@@ -124,6 +169,30 @@ export async function resolveSandboxContext(params: {
     config: params.config,
     workspaceDir: params.workspaceDir,
   });
+
+  const seatbelt = resolveSeatbeltContextConfig({
+    cfg,
+    workspaceDir,
+    agentWorkspaceDir,
+    agentId: runtime.agentId,
+  });
+
+  if (cfg.backend === "seatbelt") {
+    return {
+      enabled: true,
+      backend: "seatbelt",
+      sessionKey: rawSessionKey,
+      workspaceDir,
+      agentWorkspaceDir,
+      workspaceAccess: cfg.workspaceAccess,
+      containerName: "",
+      containerWorkdir: workspaceDir,
+      docker: cfg.docker,
+      seatbelt,
+      tools: cfg.tools,
+      browserAllowHostControl: cfg.browser.allowHostControl,
+    };
+  }
 
   const docker = await resolveSandboxDockerUser({
     docker: cfg.docker,
@@ -168,6 +237,7 @@ export async function resolveSandboxContext(params: {
 
   const sandboxContext: SandboxContext = {
     enabled: true,
+    backend: "docker",
     sessionKey: rawSessionKey,
     workspaceDir,
     agentWorkspaceDir,
@@ -175,6 +245,7 @@ export async function resolveSandboxContext(params: {
     containerName,
     containerWorkdir: resolvedCfg.docker.workdir,
     docker: resolvedCfg.docker,
+    seatbelt,
     tools: resolvedCfg.tools,
     browserAllowHostControl: resolvedCfg.browser.allowHostControl,
     browser: browser ?? undefined,
@@ -204,7 +275,8 @@ export async function ensureSandboxWorkspaceForSession(params: {
   });
 
   return {
+    backend: cfg.backend,
     workspaceDir,
-    containerWorkdir: cfg.docker.workdir,
+    containerWorkdir: cfg.backend === "seatbelt" ? workspaceDir : cfg.docker.workdir,
   };
 }

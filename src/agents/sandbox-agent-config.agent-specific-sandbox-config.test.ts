@@ -435,4 +435,37 @@ describe("Agent-specific sandbox config", () => {
       }
     }
   });
+
+  it("resolves seatbelt context without docker container setup", async () => {
+    const cfg: OpenClawConfig = {
+      agents: {
+        defaults: {
+          sandbox: {
+            mode: "all",
+            backend: "seatbelt",
+            workspaceAccess: "ro",
+            seatbelt: {
+              profile: "demo-open",
+              params: {
+                WORKSPACE_ACCESS: "override-rw",
+                CUSTOM_FLAG: "enabled",
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const context = await resolveContext(cfg, "agent:main:thread:123", "/tmp/test-seatbelt");
+    expect(context).toBeDefined();
+    expect(context?.backend).toBe("seatbelt");
+    expect(context?.seatbelt?.profile).toBe("demo-open");
+    expect(context?.seatbelt?.profilePath).toContain("demo-open.sb");
+    expect(context?.seatbelt?.params.CUSTOM_FLAG).toBe("enabled");
+    // User params override auto-generated values.
+    expect(context?.seatbelt?.params.WORKSPACE_ACCESS).toBe("override-rw");
+    expect(context?.seatbelt?.params.PROJECT_DIR).toBe(context?.workspaceDir);
+    expect(context?.seatbelt?.params.WORKSPACE_DIR).toBe(context?.agentWorkspaceDir);
+    expect(spawnCalls.some((call) => call.command === "docker")).toBe(false);
+  });
 });
