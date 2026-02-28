@@ -65,6 +65,22 @@ describe("resolvePromptModeForSession", () => {
     expect(resolvePromptModeForSession("agent:main:cron:job-1")).toBe("full");
     expect(resolvePromptModeForSession("agent:main:cron:job-1:run:run-abc")).toBe("full");
   });
+
+  it("uses agent promptMode override when provided", () => {
+    expect(resolvePromptModeForSession("agent:main:main", "none")).toBe("none");
+    expect(resolvePromptModeForSession("agent:main:main", "minimal")).toBe("minimal");
+    expect(resolvePromptModeForSession("agent:main:main", "full")).toBe("full");
+  });
+
+  it("agent promptMode overrides subagent default", () => {
+    expect(resolvePromptModeForSession("agent:main:subagent:child", "full")).toBe("full");
+    expect(resolvePromptModeForSession("agent:main:subagent:child", "none")).toBe("none");
+  });
+
+  it("falls back to session-based resolution when no agent override", () => {
+    expect(resolvePromptModeForSession("agent:main:main", undefined)).toBe("full");
+    expect(resolvePromptModeForSession("agent:main:subagent:child", undefined)).toBe("minimal");
+  });
 });
 
 describe("resolveAttemptFsWorkspaceOnly", () => {

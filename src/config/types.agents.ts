@@ -8,6 +8,8 @@ import type { AgentToolsConfig, MemorySearchConfig } from "./types.tools.js";
 export type AgentConfig = {
   id: string;
   default?: boolean;
+  /** Controls system prompt verbosity: "full" (default), "minimal", or "none" (1-line identity). */
+  promptMode?: "full" | "minimal" | "none";
   name?: string;
   workspace?: string;
   agentDir?: string;
