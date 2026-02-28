@@ -792,6 +792,7 @@ export async function startGatewayServer(
         tailscaleMode,
         resetOnExit: tailscaleConfig.resetOnExit,
         port,
+        tlsEnabled: cfgAtStart.gateway?.tls?.enabled === true,
         controlUiBasePath,
         logTailscale,
       });

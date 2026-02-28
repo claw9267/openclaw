@@ -447,7 +447,7 @@ export async function runTui(opts: TuiOptions) {
     localRunIds.clear();
   };
 
-  const client = new GatewayChatClient({
+  const client = await GatewayChatClient.create({
     url: opts.url,
     token: opts.token,
     password: opts.password,

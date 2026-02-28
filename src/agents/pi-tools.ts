@@ -400,10 +400,12 @@ export function createOpenClawCodingTools(options?: {
       options?.exec?.notifyOnExitEmptySuccess ?? execConfig.notifyOnExitEmptySuccess,
     sandbox: sandbox
       ? {
+          backend: sandbox.backend ?? "docker",
           containerName: sandbox.containerName,
           workspaceDir: sandbox.workspaceDir,
           containerWorkdir: sandbox.containerWorkdir,
           env: sandbox.docker.env,
+          seatbelt: sandbox.seatbelt,
         }
       : undefined,
   });

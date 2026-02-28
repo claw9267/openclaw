@@ -2,6 +2,7 @@ import type {
   SandboxBrowserSettings,
   SandboxDockerSettings,
   SandboxPruneSettings,
+  SandboxSeatbeltSettings,
 } from "./types.sandbox.js";
 
 export type AgentModelConfig =
@@ -28,8 +29,12 @@ export type AgentSandboxConfig = {
   /** Legacy alias for scope ("session" when true, "shared" when false). */
   perSession?: boolean;
   workspaceRoot?: string;
+  /** Sandbox backend: "docker" (default) or "seatbelt" (macOS only). */
+  backend?: "docker" | "seatbelt";
   /** Docker-specific sandbox settings. */
   docker?: SandboxDockerSettings;
+  /** Seatbelt (sandbox-exec) settings. Only used when backend is "seatbelt". */
+  seatbelt?: SandboxSeatbeltSettings;
   /** Optional sandboxed browser settings. */
   browser?: SandboxBrowserSettings;
   /** Auto-prune sandbox settings. */

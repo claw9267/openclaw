@@ -1,7 +1,11 @@
 import type { SandboxFsBridge } from "./fs-bridge.js";
 import type { SandboxDockerConfig } from "./types.docker.js";
+import type { SandboxSeatbeltConfig } from "./types.seatbelt.js";
 
 export type { SandboxDockerConfig } from "./types.docker.js";
+export type { SandboxSeatbeltConfig, SandboxSeatbeltProxyConfig } from "./types.seatbelt.js";
+
+export type SandboxBackend = "docker" | "seatbelt";
 
 export type SandboxToolPolicy = {
   allow?: string[];
@@ -54,10 +58,14 @@ export type SandboxScope = "session" | "agent" | "shared";
 
 export type SandboxConfig = {
   mode: "off" | "non-main" | "all";
+  /** Sandbox backend: "docker" (default) or "seatbelt" (macOS only). */
+  backend: SandboxBackend;
   scope: SandboxScope;
   workspaceAccess: SandboxWorkspaceAccess;
   workspaceRoot: string;
   docker: SandboxDockerConfig;
+  /** Seatbelt (sandbox-exec) configuration. Only used when backend is "seatbelt". */
+  seatbelt?: SandboxSeatbeltConfig;
   browser: SandboxBrowserConfig;
   tools: SandboxToolPolicy;
   prune: SandboxPruneConfig;
@@ -71,13 +79,18 @@ export type SandboxBrowserContext = {
 
 export type SandboxContext = {
   enabled: boolean;
+  /** Sandbox backend in use for this session. */
+  backend: SandboxBackend;
   sessionKey: string;
   workspaceDir: string;
   agentWorkspaceDir: string;
   workspaceAccess: SandboxWorkspaceAccess;
+  /** Docker container name. Set when backend is "docker". */
   containerName: string;
   containerWorkdir: string;
   docker: SandboxDockerConfig;
+  /** Seatbelt config. Set when backend is "seatbelt". */
+  seatbelt?: SandboxSeatbeltConfig;
   tools: SandboxToolPolicy;
   browserAllowHostControl: boolean;
   browser?: SandboxBrowserContext;

@@ -11,8 +11,10 @@ import { ensureSandboxBrowser } from "./browser.js";
 import { resolveSandboxConfigForAgent } from "./config.js";
 import { ensureSandboxContainer } from "./docker.js";
 import { createSandboxFsBridge } from "./fs-bridge.js";
+import { createSeatbeltFsBridge } from "./seatbelt-fs-bridge.js";
 import { maybePruneSandboxes } from "./prune.js";
 import { resolveSandboxRuntimeStatus } from "./runtime-status.js";
+import { getSeatbeltProxyPort, getSeatbeltProxyToken } from "./seatbelt-proxy.js";
 import { resolveSandboxScopeKey, resolveSandboxWorkspaceDir } from "./shared.js";
 import type { SandboxContext, SandboxDockerConfig, SandboxWorkspaceInfo } from "./types.js";
 import { ensureSandboxWorkspace } from "./workspace.js";
@@ -114,7 +116,7 @@ export async function resolveSandboxContext(params: {
   if (!resolved) {
     return null;
   }
-  const { rawSessionKey, cfg } = resolved;
+  const { rawSessionKey, runtime, cfg } = resolved;
 
   await maybePruneSandboxes(cfg);
 
@@ -124,6 +126,46 @@ export async function resolveSandboxContext(params: {
     config: params.config,
     workspaceDir: params.workspaceDir,
   });
+
+  // Seatbelt backend: no Docker container needed
+  if (cfg.backend === "seatbelt") {
+    // Override proxy port with the live port from the running proxy
+    const seatbelt = cfg.seatbelt ? { ...cfg.seatbelt } : undefined;
+    if (seatbelt?.proxy?.enabled) {
+      const livePort = getSeatbeltProxyPort();
+      const agentId = runtime.agentId;
+      const token = agentId ? getSeatbeltProxyToken(agentId) : undefined;
+      if (livePort) {
+        seatbelt.proxy = { ...seatbelt.proxy, port: livePort, ...(token ? { token } : {}) };
+      }
+    }
+    // Auto-populate seatbelt params that profiles expect
+    if (seatbelt) {
+      seatbelt.params = {
+        PROJECT_DIR: workspaceDir,
+        WORKSPACE_DIR: agentWorkspaceDir,
+        HOME_DIR: process.env.HOME || workspaceDir,
+        TMPDIR: "/tmp",
+        ...seatbelt.params,
+      };
+    }
+    const seatbeltContext: SandboxContext = {
+      enabled: true,
+      backend: "seatbelt",
+      sessionKey: rawSessionKey,
+      workspaceDir,
+      agentWorkspaceDir,
+      workspaceAccess: cfg.workspaceAccess,
+      containerName: "", // not used for seatbelt
+      containerWorkdir: workspaceDir, // seatbelt runs on host paths
+      docker: cfg.docker,
+      seatbelt,
+      tools: cfg.tools,
+      browserAllowHostControl: cfg.browser.allowHostControl,
+    };
+    seatbeltContext.fsBridge = createSeatbeltFsBridge({ sandbox: seatbeltContext });
+    return seatbeltContext;
+  }
 
   const docker = await resolveSandboxDockerUser({
     docker: cfg.docker,
@@ -168,6 +210,7 @@ export async function resolveSandboxContext(params: {
 
   const sandboxContext: SandboxContext = {
     enabled: true,
+    backend: "docker",
     sessionKey: rawSessionKey,
     workspaceDir,
     agentWorkspaceDir,
@@ -194,7 +237,7 @@ export async function ensureSandboxWorkspaceForSession(params: {
   if (!resolved) {
     return null;
   }
-  const { rawSessionKey, cfg } = resolved;
+  const { rawSessionKey, runtime, cfg } = resolved;
 
   const { workspaceDir } = await ensureSandboxWorkspaceLayout({
     cfg,

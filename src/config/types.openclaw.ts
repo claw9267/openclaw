@@ -28,6 +28,10 @@ import type { SkillsConfig } from "./types.skills.js";
 import type { ToolsConfig } from "./types.tools.js";
 
 export type OpenClawConfig = {
+  workspace?: {
+    /** Exclude specific bootstrap files from workspace injection by filename. */
+    bootstrapExclude?: string[];
+  };
   meta?: {
     /** Last OpenClaw version that wrote this config. */
     lastTouchedVersion?: string;

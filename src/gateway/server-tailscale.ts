@@ -10,6 +10,7 @@ export async function startGatewayTailscaleExposure(params: {
   tailscaleMode: "off" | "serve" | "funnel";
   resetOnExit?: boolean;
   port: number;
+  tlsEnabled?: boolean;
   controlUiBasePath?: string;
   logTailscale: { info: (msg: string) => void; warn: (msg: string) => void };
 }): Promise<(() => Promise<void>) | null> {
@@ -19,9 +20,9 @@ export async function startGatewayTailscaleExposure(params: {
 
   try {
     if (params.tailscaleMode === "serve") {
-      await enableTailscaleServe(params.port);
+      await enableTailscaleServe(params.port, undefined, params.tlsEnabled);
     } else {
-      await enableTailscaleFunnel(params.port);
+      await enableTailscaleFunnel(params.port, undefined, params.tlsEnabled);
     }
     const host = await getTailnetHostname().catch(() => null);
     if (host) {

@@ -1,4 +1,5 @@
 import type { OpenClawConfig } from "../../config/config.js";
+import type { SandboxSeatbeltSettings } from "../../config/types.sandbox.js";
 import { resolveAgentConfig } from "../agent-scope.js";
 import {
   DEFAULT_SANDBOX_BROWSER_AUTOSTART_TIMEOUT_MS,
@@ -14,14 +15,19 @@ import {
   DEFAULT_SANDBOX_MAX_AGE_DAYS,
   DEFAULT_SANDBOX_WORKDIR,
   DEFAULT_SANDBOX_WORKSPACE_ROOT,
+  DEFAULT_SEATBELT_PROFILE,
+  DEFAULT_SEATBELT_PROFILE_DIR,
+  DEFAULT_SEATBELT_PROXY_PORT,
 } from "./constants.js";
 import { resolveSandboxToolPolicyForAgent } from "./tool-policy.js";
 import type {
+  SandboxBackend,
   SandboxBrowserConfig,
   SandboxConfig,
   SandboxDockerConfig,
   SandboxPruneConfig,
   SandboxScope,
+  SandboxSeatbeltConfig,
 } from "./types.js";
 
 export const DANGEROUS_SANDBOX_DOCKER_BOOLEAN_KEYS = [
@@ -167,10 +173,27 @@ export function resolveSandboxPruneConfig(params: {
   };
 }
 
-export function resolveSandboxConfigForAgent(
-  cfg?: OpenClawConfig,
-  agentId?: string,
-): SandboxConfig {
+export function resolveSandboxSeatbeltConfig(params: {
+  globalSeatbelt?: SandboxSeatbeltSettings;
+  agentSeatbelt?: SandboxSeatbeltSettings;
+}): SandboxSeatbeltConfig {
+  const agent = params.agentSeatbelt;
+  const global = params.globalSeatbelt;
+  return {
+    profile: agent?.profile ?? global?.profile ?? DEFAULT_SEATBELT_PROFILE,
+    profileDir: agent?.profileDir ?? global?.profileDir ?? DEFAULT_SEATBELT_PROFILE_DIR,
+    params: { ...(global?.params ?? {}), ...(agent?.params ?? {}) },
+    proxy: {
+      enabled: agent?.proxy?.enabled ?? global?.proxy?.enabled ?? true,
+      port: agent?.proxy?.port ?? global?.proxy?.port ?? DEFAULT_SEATBELT_PROXY_PORT,
+      defaultPolicy: agent?.proxy?.defaultPolicy ?? global?.proxy?.defaultPolicy ?? "deny",
+      allowedDomains: agent?.proxy?.allowedDomains ?? global?.proxy?.allowedDomains ?? [],
+      deniedDomains: agent?.proxy?.deniedDomains ?? global?.proxy?.deniedDomains ?? [],
+    },
+  };
+}
+
+export function resolveSandboxConfigForAgent(cfg?: OpenClawConfig, agentId?: string): SandboxConfig {
   const agent = cfg?.agents?.defaults?.sandbox;
 
   // Agent-specific sandbox config overrides global
@@ -187,8 +210,11 @@ export function resolveSandboxConfigForAgent(
 
   const toolPolicy = resolveSandboxToolPolicyForAgent(cfg, agentId);
 
+  const backend: SandboxBackend = (agentSandbox?.backend ?? agent?.backend ?? "docker") as SandboxBackend;
+
   return {
     mode: agentSandbox?.mode ?? agent?.mode ?? "off",
+    backend,
     scope,
     workspaceAccess: agentSandbox?.workspaceAccess ?? agent?.workspaceAccess ?? "none",
     workspaceRoot:
@@ -198,6 +224,13 @@ export function resolveSandboxConfigForAgent(
       globalDocker: agent?.docker,
       agentDocker: agentSandbox?.docker,
     }),
+    seatbelt:
+      backend === "seatbelt"
+        ? resolveSandboxSeatbeltConfig({
+            globalSeatbelt: agent?.seatbelt,
+            agentSeatbelt: agentSandbox?.seatbelt,
+          })
+        : undefined,
     browser: resolveSandboxBrowserConfig({
       scope,
       globalBrowser: agent?.browser,

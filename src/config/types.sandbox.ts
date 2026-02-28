@@ -94,3 +94,27 @@ export type SandboxPruneSettings = {
   /** Prune if older than N days (0 disables). */
   maxAgeDays?: number;
 };
+
+export type SandboxSeatbeltProxySettings = {
+  /** Whether network proxy is enabled for this agent. Default: true. */
+  enabled?: boolean;
+  /** Proxy port. 0 = auto-assign. */
+  port?: number;
+  /** Default policy: "allow" passes all, "deny" blocks unless allowlisted. */
+  defaultPolicy?: "allow" | "deny";
+  /** Domains to allow when defaultPolicy is "deny". Supports wildcards (*.example.com). */
+  allowedDomains?: string[];
+  /** Domains to deny when defaultPolicy is "allow". */
+  deniedDomains?: string[];
+};
+
+export type SandboxSeatbeltSettings = {
+  /** Seatbelt (.sb) profile filename. */
+  profile?: string;
+  /** Directory containing .sb profile files. */
+  profileDir?: string;
+  /** Extra parameters passed to sandbox-exec via -D key=value. */
+  params?: Record<string, string>;
+  /** Network proxy configuration for domain-level filtering. */
+  proxy?: SandboxSeatbeltProxySettings;
+};

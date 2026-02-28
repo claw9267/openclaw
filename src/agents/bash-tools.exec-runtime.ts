@@ -22,12 +22,14 @@ import {
 } from "./bash-process-registry.js";
 import {
   buildDockerExecArgs,
+  buildSeatbeltExecArgs,
   chunkString,
   clampWithDefault,
   readEnvInt,
 } from "./bash-tools.shared.js";
 import { buildCursorPositionResponse, stripDsrRequests } from "./pty-dsr.js";
 import { getShellConfig, sanitizeBinaryOutput } from "./shell-utils.js";
+import { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 
 // Sanitize inherited host env before merge so dangerous variables from process.env
 // are not propagated into non-sandboxed executions.
@@ -377,18 +379,41 @@ export async function runExecProcess(opts: {
         stdinMode: "pipe-open";
       } = (() => {
     if (opts.sandbox) {
+      const isSeatbelt = opts.sandbox.backend === "seatbelt";
+      const argv = isSeatbelt
+        ? [
+            "sandbox-exec",
+            ...buildSeatbeltExecArgs({
+              profilePath: path.join(
+                opts.sandbox.seatbelt?.profileDir ?? "",
+                opts.sandbox.seatbelt?.profile ?? "default.sb",
+              ),
+              command: execCommand,
+              workdir: opts.containerWorkdir ?? opts.sandbox.workspaceDir,
+              env: opts.env,
+              seatbeltParams: opts.sandbox.seatbelt?.params,
+              proxyPort: opts.sandbox.seatbelt?.proxy?.enabled
+                ? opts.sandbox.seatbelt.proxy.port
+                : undefined,
+              proxyToken: opts.sandbox.seatbelt?.proxy?.token,
+              agentId: opts.sessionKey
+                ? (resolveAgentIdFromSessionKey(opts.sessionKey) ?? undefined)
+                : undefined,
+            }),
+          ]
+        : [
+            "docker",
+            ...buildDockerExecArgs({
+              containerName: opts.sandbox.containerName,
+              command: execCommand,
+              workdir: opts.containerWorkdir ?? opts.sandbox.containerWorkdir,
+              env: opts.env,
+              tty: opts.usePty,
+            }),
+          ];
       return {
         mode: "child" as const,
-        argv: [
-          "docker",
-          ...buildDockerExecArgs({
-            containerName: opts.sandbox.containerName,
-            command: execCommand,
-            workdir: opts.containerWorkdir ?? opts.sandbox.containerWorkdir,
-            env: opts.env,
-            tty: opts.usePty,
-          }),
-        ],
+        argv,
         env: process.env,
         stdinMode: opts.usePty ? ("pipe-open" as const) : ("pipe-closed" as const),
       };
