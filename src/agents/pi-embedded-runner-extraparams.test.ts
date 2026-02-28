@@ -379,6 +379,37 @@ describe("applyExtraParamsToAgent", () => {
     expect(payloads[0]?.thinking).toBe("off");
   });
 
+  it("strips thinking and reasoning_effort params for Cerebras provider", () => {
+    const capturedPayloads: Record<string, unknown>[] = [];
+    const mockBase: StreamFn = (_m, _c, opts) => {
+      const payload: Record<string, unknown> = {
+        model: "llama3.1-8b",
+        messages: [],
+        thinking: { type: "disabled" },
+        reasoning_effort: "off",
+      };
+      (opts as { onPayload?: (p: unknown) => void })?.onPayload?.(payload);
+      capturedPayloads.push(payload);
+      return {} as never;
+    };
+
+    const agent: { streamFn?: StreamFn } = { streamFn: mockBase };
+    applyExtraParamsToAgent(agent, undefined, "cerebras", "llama3.1-8b");
+
+    const model = {
+      api: "openai-completions",
+      provider: "cerebras",
+      model: "llama3.1-8b",
+    } as Parameters<StreamFn>[0];
+
+    void agent.streamFn!(model, { messages: [] }, {});
+
+    expect(capturedPayloads).toHaveLength(1);
+    expect(capturedPayloads[0]).not.toHaveProperty("thinking");
+    expect(capturedPayloads[0]).not.toHaveProperty("reasoning_effort");
+    expect(capturedPayloads[0]).toHaveProperty("model", "llama3.1-8b");
+  });
+
   it("removes invalid negative Google thinkingBudget and maps Gemini 3.1 to thinkingLevel", () => {
     const payloads: Record<string, unknown>[] = [];
     const baseStreamFn: StreamFn = (_model, _context, options) => {
