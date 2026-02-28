@@ -344,7 +344,14 @@ export async function resolvePromptBuildHookResult(params: {
   };
 }
 
-export function resolvePromptModeForSession(sessionKey?: string): "minimal" | "full" {
+export function resolvePromptModeForSession(
+  sessionKey?: string,
+  agentPromptMode?: "full" | "minimal" | "none",
+): "full" | "minimal" | "none" {
+  // Explicit per-agent config takes precedence
+  if (agentPromptMode) {
+    return agentPromptMode;
+  }
   if (!sessionKey) {
     return "full";
   }
@@ -638,7 +645,9 @@ export async function runEmbeddedAttempt(
       },
     });
     const isDefaultAgent = sessionAgentId === defaultAgentId;
-    const promptMode = resolvePromptModeForSession(params.sessionKey);
+    const agentPromptMode = params.config?.agents?.list?.find((a) => a.id === sessionAgentId)
+      ?.promptMode as "full" | "minimal" | "none" | undefined;
+    const promptMode = resolvePromptModeForSession(params.sessionKey, agentPromptMode);
     const docsPath = await resolveOpenClawDocsPath({
       workspaceDir: effectiveWorkspace,
       argv1: process.argv[1],
