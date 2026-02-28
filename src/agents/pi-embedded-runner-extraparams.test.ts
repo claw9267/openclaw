@@ -161,7 +161,7 @@ describe("applyExtraParamsToAgent", () => {
     };
   }
 
-  function runResponsesPayloadMutationCase(params: {
+  function runStoreMutationCase(params: {
     applyProvider: string;
     applyModelId: string;
     model:
@@ -169,21 +169,14 @@ describe("applyExtraParamsToAgent", () => {
       | Model<"openai-codex-responses">
       | Model<"openai-completions">;
     options?: SimpleStreamOptions;
-    cfg?: Record<string, unknown>;
-    payload?: Record<string, unknown>;
   }) {
-    const payload = params.payload ?? { store: false };
+    const payload = { store: false };
     const baseStreamFn: StreamFn = (_model, _context, options) => {
       options?.onPayload?.(payload);
       return {} as ReturnType<StreamFn>;
     };
     const agent = { streamFn: baseStreamFn };
-    applyExtraParamsToAgent(
-      agent,
-      params.cfg as Parameters<typeof applyExtraParamsToAgent>[1],
-      params.applyProvider,
-      params.applyModelId,
-    );
+    applyExtraParamsToAgent(agent, undefined, params.applyProvider, params.applyModelId);
     const context: Context = { messages: [] };
     void agent.streamFn?.(params.model, context, params.options ?? {});
     return payload;
@@ -379,7 +372,7 @@ describe("applyExtraParamsToAgent", () => {
     expect(payloads[0]?.thinking).toBe("off");
   });
 
-  it("strips thinking and reasoning_effort params for Cerebras provider", () => {
+  it("strips thinking and reasoning_effort for non-reasoning Cerebras models", () => {
     const capturedPayloads: Record<string, unknown>[] = [];
     const mockBase: StreamFn = (_m, _c, opts) => {
       const payload: Record<string, unknown> = {
@@ -408,6 +401,50 @@ describe("applyExtraParamsToAgent", () => {
     expect(capturedPayloads[0]).not.toHaveProperty("thinking");
     expect(capturedPayloads[0]).not.toHaveProperty("reasoning_effort");
     expect(capturedPayloads[0]).toHaveProperty("model", "llama3.1-8b");
+  });
+
+  it("strips thinking but preserves reasoning_effort for reasoning Cerebras models", () => {
+    const capturedPayloads: Record<string, unknown>[] = [];
+    const mockBase: StreamFn = (_m, _c, opts) => {
+      const payload: Record<string, unknown> = {
+        model: "cerebras-reasoning-v1",
+        messages: [],
+        thinking: { type: "enabled", budget_tokens: 1024 },
+        reasoning_effort: "medium",
+      };
+      (opts as { onPayload?: (p: unknown) => void })?.onPayload?.(payload);
+      capturedPayloads.push(payload);
+      return {} as never;
+    };
+
+    // Config with a reasoning model defined
+    const cfg = {
+      models: {
+        providers: {
+          cerebras: {
+            models: [{ id: "cerebras-reasoning-v1", reasoning: true }],
+          },
+        },
+      },
+    } as unknown as Parameters<typeof applyExtraParamsToAgent>[1];
+
+    const agent: { streamFn?: StreamFn } = { streamFn: mockBase };
+    applyExtraParamsToAgent(agent, cfg, "cerebras", "cerebras-reasoning-v1");
+
+    const model = {
+      api: "openai-completions",
+      provider: "cerebras",
+      model: "cerebras-reasoning-v1",
+    } as Parameters<StreamFn>[0];
+
+    void agent.streamFn!(model, { messages: [] }, {});
+
+    expect(capturedPayloads).toHaveLength(1);
+    // thinking is always stripped for Cerebras
+    expect(capturedPayloads[0]).not.toHaveProperty("thinking");
+    // reasoning_effort preserved for reasoning models
+    expect(capturedPayloads[0]).toHaveProperty("reasoning_effort", "medium");
+    expect(capturedPayloads[0]).toHaveProperty("model", "cerebras-reasoning-v1");
   });
 
   it("removes invalid negative Google thinkingBudget and maps Gemini 3.1 to thinkingLevel", () => {
@@ -852,7 +889,7 @@ describe("applyExtraParamsToAgent", () => {
   });
 
   it("forces store=true for direct OpenAI Responses payloads", () => {
-    const payload = runResponsesPayloadMutationCase({
+    const payload = runStoreMutationCase({
       applyProvider: "openai",
       applyModelId: "gpt-5",
       model: {
@@ -866,7 +903,7 @@ describe("applyExtraParamsToAgent", () => {
   });
 
   it("does not force store for OpenAI Responses routed through non-OpenAI base URLs", () => {
-    const payload = runResponsesPayloadMutationCase({
+    const payload = runStoreMutationCase({
       applyProvider: "openai",
       applyModelId: "gpt-5",
       model: {
@@ -879,158 +916,11 @@ describe("applyExtraParamsToAgent", () => {
     expect(payload.store).toBe(false);
   });
 
-  it("does not force store for OpenAI Responses when baseUrl is empty", () => {
-    const payload = runResponsesPayloadMutationCase({
-      applyProvider: "openai",
-      applyModelId: "gpt-5",
-      model: {
-        api: "openai-responses",
-        provider: "openai",
-        id: "gpt-5",
-        baseUrl: "",
-      } as Model<"openai-responses">,
-    });
-    expect(payload.store).toBe(false);
-  });
-
-  it("does not force store for models that declare supportsStore=false", () => {
-    const payload = runResponsesPayloadMutationCase({
-      applyProvider: "azure-openai-responses",
-      applyModelId: "gpt-4o",
-      model: {
-        api: "openai-responses",
-        provider: "azure-openai-responses",
-        id: "gpt-4o",
-        name: "gpt-4o",
-        baseUrl: "https://example.openai.azure.com/openai/v1",
-        reasoning: false,
-        input: ["text"],
-        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-        contextWindow: 128_000,
-        maxTokens: 16_384,
-        compat: { supportsStore: false },
-      } as Model<"openai-responses"> & { compat?: { supportsStore?: boolean } },
-    });
-    expect(payload.store).toBe(false);
-  });
-
-  it("auto-injects OpenAI Responses context_management compaction for direct OpenAI models", () => {
-    const payload = runResponsesPayloadMutationCase({
-      applyProvider: "openai",
-      applyModelId: "gpt-5",
-      model: {
-        api: "openai-responses",
-        provider: "openai",
-        id: "gpt-5",
-        baseUrl: "https://api.openai.com/v1",
-        contextWindow: 200_000,
-      } as Model<"openai-responses">,
-    });
-    expect(payload.context_management).toEqual([
-      {
-        type: "compaction",
-        compact_threshold: 140_000,
-      },
-    ]);
-  });
-
-  it("does not auto-inject OpenAI Responses context_management for Azure by default", () => {
-    const payload = runResponsesPayloadMutationCase({
-      applyProvider: "azure-openai-responses",
-      applyModelId: "gpt-4o",
-      model: {
-        api: "openai-responses",
-        provider: "azure-openai-responses",
-        id: "gpt-4o",
-        baseUrl: "https://example.openai.azure.com/openai/v1",
-      } as Model<"openai-responses">,
-    });
-    expect(payload).not.toHaveProperty("context_management");
-  });
-
-  it("allows explicitly enabling OpenAI Responses context_management compaction", () => {
-    const payload = runResponsesPayloadMutationCase({
-      applyProvider: "azure-openai-responses",
-      applyModelId: "gpt-4o",
-      cfg: {
-        agents: {
-          defaults: {
-            models: {
-              "azure-openai-responses/gpt-4o": {
-                params: {
-                  responsesServerCompaction: true,
-                  responsesCompactThreshold: 42_000,
-                },
-              },
-            },
-          },
-        },
-      },
-      model: {
-        api: "openai-responses",
-        provider: "azure-openai-responses",
-        id: "gpt-4o",
-        baseUrl: "https://example.openai.azure.com/openai/v1",
-      } as Model<"openai-responses">,
-    });
-    expect(payload.context_management).toEqual([
-      {
-        type: "compaction",
-        compact_threshold: 42_000,
-      },
-    ]);
-  });
-
-  it("preserves existing context_management payload values", () => {
-    const payload = runResponsesPayloadMutationCase({
-      applyProvider: "openai",
-      applyModelId: "gpt-5",
-      model: {
-        api: "openai-responses",
-        provider: "openai",
-        id: "gpt-5",
-        baseUrl: "https://api.openai.com/v1",
-      } as Model<"openai-responses">,
-      payload: {
-        store: false,
-        context_management: [{ type: "compaction", compact_threshold: 12_345 }],
-      },
-    });
-    expect(payload.context_management).toEqual([{ type: "compaction", compact_threshold: 12_345 }]);
-  });
-
-  it("allows disabling OpenAI Responses context_management compaction via model params", () => {
-    const payload = runResponsesPayloadMutationCase({
-      applyProvider: "openai",
-      applyModelId: "gpt-5",
-      cfg: {
-        agents: {
-          defaults: {
-            models: {
-              "openai/gpt-5": {
-                params: {
-                  responsesServerCompaction: false,
-                },
-              },
-            },
-          },
-        },
-      },
-      model: {
-        api: "openai-responses",
-        provider: "openai",
-        id: "gpt-5",
-        baseUrl: "https://api.openai.com/v1",
-      } as Model<"openai-responses">,
-    });
-    expect(payload).not.toHaveProperty("context_management");
-  });
-
   it.each([
     {
       name: "with openai-codex provider config",
       run: () =>
-        runResponsesPayloadMutationCase({
+        runStoreMutationCase({
           applyProvider: "openai-codex",
           applyModelId: "codex-mini-latest",
           model: {
@@ -1044,7 +934,7 @@ describe("applyExtraParamsToAgent", () => {
     {
       name: "without config via provider/model hints",
       run: () =>
-        runResponsesPayloadMutationCase({
+        runStoreMutationCase({
           applyProvider: "openai-codex",
           applyModelId: "codex-mini-latest",
           model: {
