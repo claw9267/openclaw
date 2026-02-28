@@ -467,6 +467,39 @@ function createSiliconFlowThinkingWrapper(baseStreamFn: StreamFn | undefined): S
 }
 
 /**
+ * Cerebras does not support the 'thinking' parameter at all — any value
+ * (including null, "off", or {type: "disabled"}) causes a 400 error.
+ * The `thinking` field is always stripped.
+ *
+ * `reasoning_effort` is only stripped for non-reasoning models. If Cerebras
+ * adds reasoning models in the future, they may accept this parameter.
+ */
+function createCerebrasThinkingWrapper(
+  baseStreamFn: StreamFn | undefined,
+  opts: { reasoning: boolean },
+): StreamFn {
+  const underlying = baseStreamFn ?? streamSimple;
+  return (model, context, options) => {
+    const originalOnPayload = options?.onPayload;
+    return underlying(model, context, {
+      ...options,
+      onPayload: (payload) => {
+        if (payload && typeof payload === "object") {
+          const payloadObj = payload as Record<string, unknown>;
+          // Cerebras never supports Anthropic-style thinking blocks
+          delete payloadObj.thinking;
+          // Only strip reasoning_effort for non-reasoning models
+          if (!opts.reasoning) {
+            delete payloadObj.reasoning_effort;
+          }
+        }
+        originalOnPayload?.(payload);
+      },
+    });
+  };
+}
+
+/**
  * Create a streamFn wrapper that adds OpenRouter app attribution headers
  * and injects reasoning.effort based on the configured thinking level.
  */
@@ -699,6 +732,17 @@ export function applyExtraParamsToAgent(
       `normalizing thinking=off to thinking=null for SiliconFlow compatibility (${provider}/${modelId})`,
     );
     agent.streamFn = createSiliconFlowThinkingWrapper(agent.streamFn);
+  }
+
+  if (provider === "cerebras") {
+    const cerebrasModelCfg = cfg?.models?.providers?.[provider]?.models?.find(
+      (m) => m.id === modelId,
+    );
+    const isReasoning = cerebrasModelCfg?.reasoning ?? false;
+    log.debug(
+      `stripping thinking params for Cerebras compatibility (${provider}/${modelId}, reasoning=${isReasoning})`,
+    );
+    agent.streamFn = createCerebrasThinkingWrapper(agent.streamFn, { reasoning: isReasoning });
   }
 
   if (provider === "openrouter") {

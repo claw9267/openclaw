@@ -372,6 +372,81 @@ describe("applyExtraParamsToAgent", () => {
     expect(payloads[0]?.thinking).toBe("off");
   });
 
+  it("strips thinking and reasoning_effort for non-reasoning Cerebras models", () => {
+    const capturedPayloads: Record<string, unknown>[] = [];
+    const mockBase: StreamFn = (_m, _c, opts) => {
+      const payload: Record<string, unknown> = {
+        model: "llama3.1-8b",
+        messages: [],
+        thinking: { type: "disabled" },
+        reasoning_effort: "off",
+      };
+      (opts as { onPayload?: (p: unknown) => void })?.onPayload?.(payload);
+      capturedPayloads.push(payload);
+      return {} as never;
+    };
+
+    const agent: { streamFn?: StreamFn } = { streamFn: mockBase };
+    applyExtraParamsToAgent(agent, undefined, "cerebras", "llama3.1-8b");
+
+    const model = {
+      api: "openai-completions",
+      provider: "cerebras",
+      model: "llama3.1-8b",
+    } as Parameters<StreamFn>[0];
+
+    void agent.streamFn!(model, { messages: [] }, {});
+
+    expect(capturedPayloads).toHaveLength(1);
+    expect(capturedPayloads[0]).not.toHaveProperty("thinking");
+    expect(capturedPayloads[0]).not.toHaveProperty("reasoning_effort");
+    expect(capturedPayloads[0]).toHaveProperty("model", "llama3.1-8b");
+  });
+
+  it("strips thinking but preserves reasoning_effort for reasoning Cerebras models", () => {
+    const capturedPayloads: Record<string, unknown>[] = [];
+    const mockBase: StreamFn = (_m, _c, opts) => {
+      const payload: Record<string, unknown> = {
+        model: "cerebras-reasoning-v1",
+        messages: [],
+        thinking: { type: "enabled", budget_tokens: 1024 },
+        reasoning_effort: "medium",
+      };
+      (opts as { onPayload?: (p: unknown) => void })?.onPayload?.(payload);
+      capturedPayloads.push(payload);
+      return {} as never;
+    };
+
+    // Config with a reasoning model defined
+    const cfg = {
+      models: {
+        providers: {
+          cerebras: {
+            models: [{ id: "cerebras-reasoning-v1", reasoning: true }],
+          },
+        },
+      },
+    } as unknown as Parameters<typeof applyExtraParamsToAgent>[1];
+
+    const agent: { streamFn?: StreamFn } = { streamFn: mockBase };
+    applyExtraParamsToAgent(agent, cfg, "cerebras", "cerebras-reasoning-v1");
+
+    const model = {
+      api: "openai-completions",
+      provider: "cerebras",
+      model: "cerebras-reasoning-v1",
+    } as Parameters<StreamFn>[0];
+
+    void agent.streamFn!(model, { messages: [] }, {});
+
+    expect(capturedPayloads).toHaveLength(1);
+    // thinking is always stripped for Cerebras
+    expect(capturedPayloads[0]).not.toHaveProperty("thinking");
+    // reasoning_effort preserved for reasoning models
+    expect(capturedPayloads[0]).toHaveProperty("reasoning_effort", "medium");
+    expect(capturedPayloads[0]).toHaveProperty("model", "cerebras-reasoning-v1");
+  });
+
   it("removes invalid negative Google thinkingBudget and maps Gemini 3.1 to thinkingLevel", () => {
     const payloads: Record<string, unknown>[] = [];
     const baseStreamFn: StreamFn = (_model, _context, options) => {
