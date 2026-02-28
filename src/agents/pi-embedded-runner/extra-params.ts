@@ -467,6 +467,30 @@ function createSiliconFlowThinkingWrapper(baseStreamFn: StreamFn | undefined): S
 }
 
 /**
+ * Cerebras does not support the 'thinking' parameter at all — any value
+ * (including null, "off", or {type: "disabled"}) causes a 400 error.
+ * Similarly, reasoning_effort is unsupported for non-reasoning models.
+ * Strip both fields entirely from outgoing payloads.
+ */
+function createCerebrasThinkingWrapper(baseStreamFn: StreamFn | undefined): StreamFn {
+  const underlying = baseStreamFn ?? streamSimple;
+  return (model, context, options) => {
+    const originalOnPayload = options?.onPayload;
+    return underlying(model, context, {
+      ...options,
+      onPayload: (payload) => {
+        if (payload && typeof payload === "object") {
+          const payloadObj = payload as Record<string, unknown>;
+          delete payloadObj.thinking;
+          delete payloadObj.reasoning_effort;
+        }
+        originalOnPayload?.(payload);
+      },
+    });
+  };
+}
+
+/**
  * Create a streamFn wrapper that adds OpenRouter app attribution headers
  * and injects reasoning.effort based on the configured thinking level.
  */
@@ -699,6 +723,13 @@ export function applyExtraParamsToAgent(
       `normalizing thinking=off to thinking=null for SiliconFlow compatibility (${provider}/${modelId})`,
     );
     agent.streamFn = createSiliconFlowThinkingWrapper(agent.streamFn);
+  }
+
+  if (provider === "cerebras") {
+    log.debug(
+      `stripping thinking/reasoning_effort params for Cerebras compatibility (${provider}/${modelId})`,
+    );
+    agent.streamFn = createCerebrasThinkingWrapper(agent.streamFn);
   }
 
   if (provider === "openrouter") {
