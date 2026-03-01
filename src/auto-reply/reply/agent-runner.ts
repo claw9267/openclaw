@@ -51,6 +51,13 @@ import { createReplyToModeFilterForChannel, resolveReplyToMode } from "./reply-t
 import { incrementRunCompactionCount, persistRunSessionUsage } from "./session-run-accounting.js";
 import { createTypingSignaler } from "./typing-mode.js";
 import type { TypingController } from "./typing.js";
+import {
+  checkEndOfRunNudge,
+  checkMidRunNudge,
+  checkTopicNudgeOnStart,
+  isMemoryToolCall,
+  resolveWorkingMemorySettings,
+} from "./working-memory-nudge.js";
 
 const BLOCK_REPLY_SEND_TIMEOUT_MS = 15_000;
 const UNSCHEDULED_REMINDER_NOTE =
@@ -202,6 +209,62 @@ export async function runReplyAgent(params: {
           buffer: createAudioAsVoiceBuffer({ isAudioPayload }),
         })
       : null;
+
+  const workingMemorySettings = resolveWorkingMemorySettings(cfg);
+  const wmIsCronRun = Boolean(sessionKey?.includes(":cron:"));
+  const runAgentId = followupRun.run.agentId || resolveAgentIdFromSessionKey(sessionKey ?? "main");
+
+  void checkTopicNudgeOnStart(runAgentId, followupRun.run.workspaceDir)
+    .then((nudge) => {
+      if (
+        sessionKey &&
+        workingMemorySettings?.topicCheckOnStart &&
+        !isHeartbeat &&
+        !wmIsCronRun &&
+        nudge
+      ) {
+        enqueueSystemEvent(nudge, { sessionKey });
+      }
+    })
+    .catch(() => {
+      // Best-effort check; start-of-run nudge should never fail the reply path.
+    });
+
+  let wmToolCallCount = 0;
+  let wmHadMemoryToolCall = false;
+  let wmMidRunNudgeSent = false;
+
+  const onWorkingMemoryToolStart = async (payload: {
+    name?: string;
+    phase?: string;
+    args?: unknown;
+  }): Promise<void> => {
+    if (payload.phase === "start" || payload.phase === "update") {
+      wmToolCallCount += 1;
+      if (payload.name && isMemoryToolCall(payload.name, payload.args)) {
+        wmHadMemoryToolCall = true;
+      }
+      if (
+        workingMemorySettings &&
+        !wmMidRunNudgeSent &&
+        !isHeartbeat &&
+        !wmIsCronRun &&
+        sessionKey
+      ) {
+        const midRunNudge = checkMidRunNudge(
+          wmToolCallCount,
+          wmHadMemoryToolCall,
+          workingMemorySettings,
+        );
+        if (midRunNudge) {
+          wmMidRunNudgeSent = true;
+          enqueueSystemEvent(midRunNudge, { sessionKey });
+        }
+      }
+    }
+    await opts?.onToolStart?.({ name: payload.name, phase: payload.phase, args: payload.args });
+  };
+
   const touchActiveSessionEntry = async () => {
     if (!activeSessionEntry || !activeSessionStore || !sessionKey) {
       return;
@@ -377,6 +440,7 @@ export async function runReplyAgent(params: {
       shouldEmitToolResult,
       shouldEmitToolOutput,
       pendingToolTasks,
+      onToolStart: onWorkingMemoryToolStart,
       resetSessionAfterCompactionFailure,
       resetSessionAfterRoleOrderingConflict,
       isHeartbeat,
@@ -608,6 +672,18 @@ export async function runReplyAgent(params: {
       }
       if (formatted) {
         responseUsageLine = formatted;
+      }
+    }
+
+    if (workingMemorySettings && !isHeartbeat && !wmIsCronRun && sessionKey) {
+      const endRunNudge = checkEndOfRunNudge(
+        wmToolCallCount,
+        wmHadMemoryToolCall,
+        wmMidRunNudgeSent,
+        workingMemorySettings,
+      );
+      if (endRunNudge) {
+        enqueueSystemEvent(endRunNudge, { sessionKey });
       }
     }
 
