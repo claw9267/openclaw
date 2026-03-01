@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { vi, describe, expect, it } from "vitest";
+
+vi.mock("../../process/exec.js", () => ({
+  runCommandWithTimeout: vi.fn(),
+}));
+
 import type { OpenClawConfig } from "../../config/config.js";
+import { runCommandWithTimeout } from "../../process/exec.js";
 import {
   resolveWorkingMemorySettings,
   isMemoryToolCall,
@@ -7,7 +13,11 @@ import {
   checkEndOfRunNudge,
   NUDGE_MID_RUN,
   NUDGE_END_OF_RUN,
+  checkTopicNudgeOnStart,
+  NUDGE_START_NO_TOPIC,
 } from "./working-memory-nudge.js";
+
+const mockRunCommand = vi.mocked(runCommandWithTimeout);
 
 describe("resolveWorkingMemorySettings", () => {
   it("returns defaults when no config specified", () => {
@@ -132,5 +142,44 @@ describe("checkEndOfRunNudge", () => {
 
   it("returns null when mid-run nudge was sent and memory was written after", () => {
     expect(checkEndOfRunNudge(25, true, true, settings)).toBeNull();
+  });
+});
+
+describe("checkTopicNudgeOnStart", () => {
+  it("returns nudge when no open topics", async () => {
+    mockRunCommand.mockResolvedValueOnce({
+      pid: undefined,
+      stdout: "[]",
+      stderr: "",
+      code: 0,
+      signal: null,
+      killed: false,
+      termination: "exit",
+    });
+
+    const result = await checkTopicNudgeOnStart("main", "/workspace");
+    expect(result).toBe(NUDGE_START_NO_TOPIC);
+  });
+
+  it("returns null when open topics exist", async () => {
+    mockRunCommand.mockResolvedValueOnce({
+      pid: undefined,
+      stdout: '[{"id":"topic-1","title":"open topic"}]',
+      stderr: "",
+      code: 0,
+      signal: null,
+      killed: false,
+      termination: "exit",
+    });
+
+    const result = await checkTopicNudgeOnStart("main", "/workspace");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when bd command fails", async () => {
+    mockRunCommand.mockRejectedValueOnce(new Error("bd not found"));
+
+    const result = await checkTopicNudgeOnStart("main", "/workspace");
+    expect(result).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import type { OpenClawConfig } from "../../config/config.js";
+import { runCommandWithTimeout } from "../../process/exec.js";
 
 export type WorkingMemorySettings = {
   enabled: boolean;
@@ -86,6 +87,38 @@ export function isMemoryToolCall(toolName: string, args: unknown): boolean {
     return false;
   }
   return MEMORY_TOOL_COMMANDS.has(command);
+}
+
+export async function checkTopicNudgeOnStart(
+  agentId: string,
+  workspaceDir: string,
+): Promise<string | null> {
+  try {
+    const result = await runCommandWithTimeout(
+      ["bd", "query", `label=topic AND label=${agentId} AND status=open`, "--json"],
+      {
+        cwd: workspaceDir,
+        timeoutMs: 3000,
+      },
+    );
+
+    const stdout = typeof result.stdout === "string" ? result.stdout.trim() : "";
+    if (!stdout) {
+      return NUDGE_START_NO_TOPIC;
+    }
+    try {
+      const parsed = JSON.parse(stdout);
+      if (Array.isArray(parsed) && parsed.length === 0) {
+        return NUDGE_START_NO_TOPIC;
+      }
+    } catch {
+      // If JSON parsing fails, non-empty stdout likely has human-readable rows, so a topic exists.
+      return null;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function checkMidRunNudge(
