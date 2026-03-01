@@ -88,6 +88,11 @@ export async function runAgentTurnWithFallback(params: {
   shouldEmitToolResult: () => boolean;
   shouldEmitToolOutput: () => boolean;
   pendingToolTasks: Set<Promise<void>>;
+  onToolStart?: (payload: {
+    name?: string;
+    phase?: string;
+    args?: unknown;
+  }) => Promise<void> | void;
   resetSessionAfterCompactionFailure: (reason: string) => Promise<boolean>;
   resetSessionAfterRoleOrderingConflict: (reason: string) => Promise<boolean>;
   isHeartbeat: boolean;
@@ -358,7 +363,7 @@ export async function runAgentTurnWithFallback(params: {
                 if (phase === "start" || phase === "update") {
                   await params.typingSignals.signalToolStart();
                   const args = (evt as { data?: { args?: unknown } }).data?.args;
-                  await params.opts?.onToolStart?.({ name, phase, args });
+                  await params.onToolStart?.({ name, phase, args });
                 }
               }
               // Track auto-compaction completion
