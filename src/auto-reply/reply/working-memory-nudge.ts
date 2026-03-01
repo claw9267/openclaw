@@ -139,6 +139,7 @@ export function checkEndOfRunNudge(
   toolCallCount: number,
   hadMemoryTool: boolean,
   hadMidRunNudge: boolean,
+  hadMemoryToolAfterMidRunNudge: boolean,
   settings: WorkingMemorySettings,
 ): string | null {
   if (toolCallCount < settings.flushReminderMinTools) {
@@ -147,7 +148,7 @@ export function checkEndOfRunNudge(
   if (hadMemoryTool) {
     return null;
   }
-  if (hadMidRunNudge) {
+  if (hadMidRunNudge && hadMemoryToolAfterMidRunNudge) {
     return null;
   }
   return NUDGE_END_OF_RUN;

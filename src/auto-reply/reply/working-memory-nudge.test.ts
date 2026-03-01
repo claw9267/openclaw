@@ -127,21 +127,25 @@ describe("checkEndOfRunNudge", () => {
   };
 
   it("returns null below threshold", () => {
-    expect(checkEndOfRunNudge(4, false, false, settings)).toBeNull();
+    expect(checkEndOfRunNudge(4, false, false, false, settings)).toBeNull();
   });
 
   it("returns nudge for significant work without memory writes", () => {
-    const result = checkEndOfRunNudge(10, false, false, settings);
+    const result = checkEndOfRunNudge(10, false, false, false, settings);
     expect(result).toContain("significant work");
     expect(result).toBe(NUDGE_END_OF_RUN);
   });
 
   it("returns null when memory tool was used", () => {
-    expect(checkEndOfRunNudge(10, true, false, settings)).toBeNull();
+    expect(checkEndOfRunNudge(10, true, false, false, settings)).toBeNull();
+  });
+
+  it("returns nudge when mid-run nudge was sent and no memory writes after it", () => {
+    expect(checkEndOfRunNudge(25, false, true, false, settings)).toBe(NUDGE_END_OF_RUN);
   });
 
   it("returns null when mid-run nudge was sent and memory was written after", () => {
-    expect(checkEndOfRunNudge(25, true, true, settings)).toBeNull();
+    expect(checkEndOfRunNudge(25, false, true, true, settings)).toBeNull();
   });
 });
 

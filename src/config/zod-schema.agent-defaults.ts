@@ -13,6 +13,15 @@ import {
   TypingModeSchema,
 } from "./zod-schema.core.js";
 
+export const WorkingMemorySettingsSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    topicCheckOnStart: z.boolean().optional(),
+    midRunNudgeAfterTools: z.number().int().positive().optional(),
+    flushReminderMinTools: z.number().int().positive().optional(),
+  })
+  .strict();
+
 export const AgentDefaultsSchema = z
   .object({
     model: AgentModelSchema.optional(),
@@ -100,15 +109,7 @@ export const AgentDefaultsSchema = z
       })
       .strict()
       .optional(),
-    workingMemory: z
-      .object({
-        enabled: z.boolean().optional(),
-        topicCheckOnStart: z.boolean().optional(),
-        midRunNudgeAfterTools: z.number().int().positive().optional(),
-        flushReminderMinTools: z.number().int().positive().optional(),
-      })
-      .strict()
-      .optional(),
+    workingMemory: WorkingMemorySettingsSchema.optional(),
     embeddedPi: z
       .object({
         projectSettingsPolicy: z

@@ -418,10 +418,16 @@ export const FIELD_LABELS: Record<string, string> = {
   "agents.defaults.compaction.memoryFlush.prompt": "Compaction Memory Flush Prompt",
   "agents.defaults.compaction.memoryFlush.systemPrompt": "Compaction Memory Flush System Prompt",
   "agents.defaults.workingMemory": "Working Memory",
+  "agents.list[].workingMemory": "Working Memory (Agent)",
   "agents.defaults.workingMemory.enabled": "Working Memory Nudges Enabled",
+  "agents.list[].workingMemory.enabled": "Working Memory Nudges Enabled",
   "agents.defaults.workingMemory.topicCheckOnStart": "Working Memory Topic Check on Start",
+  "agents.list[].workingMemory.topicCheckOnStart": "Working Memory Topic Check on Start",
   "agents.defaults.workingMemory.midRunNudgeAfterTools": "Working Memory Mid-Run Nudge Threshold",
+  "agents.list[].workingMemory.midRunNudgeAfterTools": "Working Memory Mid-Run Nudge Threshold",
   "agents.defaults.workingMemory.flushReminderMinTools":
+    "Working Memory End-of-Run Flush Reminder Threshold",
+  "agents.list[].workingMemory.flushReminderMinTools":
     "Working Memory End-of-Run Flush Reminder Threshold",
   "agents.defaults.embeddedPi": "Embedded Pi",
   "agents.defaults.embeddedPi.projectSettingsPolicy": "Embedded Pi Project Settings Policy",

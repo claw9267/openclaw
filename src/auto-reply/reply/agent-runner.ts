@@ -210,28 +210,32 @@ export async function runReplyAgent(params: {
         })
       : null;
 
-  const workingMemorySettings = resolveWorkingMemorySettings(cfg);
-  const wmIsCronRun = Boolean(sessionKey?.includes(":cron:"));
   const runAgentId = followupRun.run.agentId || resolveAgentIdFromSessionKey(sessionKey ?? "main");
+  const runAgentConfig = cfg.agents?.list?.find((agent) => agent.id === runAgentId);
+  const workingMemorySettings = resolveWorkingMemorySettings(cfg, runAgentConfig?.workingMemory);
+  const wmIsCronRun = Boolean(sessionKey?.includes(":cron:"));
+  const wmInitialCliProvider = isCliProvider(followupRun.run.provider, cfg);
+  const shouldRunWorkingMemoryNudges = Boolean(
+    workingMemorySettings && sessionKey && !isHeartbeat && !wmIsCronRun && !wmInitialCliProvider,
+  );
+  const wmSessionKey = sessionKey ?? "";
+  let wmStartNudgeSent = false;
 
-  void checkTopicNudgeOnStart(runAgentId, followupRun.run.workspaceDir)
-    .then((nudge) => {
-      if (
-        sessionKey &&
-        workingMemorySettings?.topicCheckOnStart &&
-        !isHeartbeat &&
-        !wmIsCronRun &&
-        nudge
-      ) {
-        enqueueSystemEvent(nudge, { sessionKey });
+  if (shouldRunWorkingMemoryNudges && workingMemorySettings?.topicCheckOnStart) {
+    try {
+      const startNudge = await checkTopicNudgeOnStart(runAgentId, followupRun.run.workspaceDir);
+      if (startNudge) {
+        wmStartNudgeSent = true;
+        enqueueSystemEvent(startNudge, { sessionKey: wmSessionKey });
       }
-    })
-    .catch(() => {
+    } catch {
       // Best-effort check; start-of-run nudge should never fail the reply path.
-    });
+    }
+  }
 
   let wmToolCallCount = 0;
   let wmHadMemoryToolCall = false;
+  let wmHadMemoryToolCallAfterMidRunNudge = false;
   let wmMidRunNudgeSent = false;
 
   const onWorkingMemoryToolStart = async (payload: {
@@ -239,17 +243,19 @@ export async function runReplyAgent(params: {
     phase?: string;
     args?: unknown;
   }): Promise<void> => {
-    if (payload.phase === "start" || payload.phase === "update") {
+    if (payload.phase === "start") {
       wmToolCallCount += 1;
       if (payload.name && isMemoryToolCall(payload.name, payload.args)) {
         wmHadMemoryToolCall = true;
+        if (wmMidRunNudgeSent) {
+          wmHadMemoryToolCallAfterMidRunNudge = true;
+        }
       }
       if (
+        shouldRunWorkingMemoryNudges &&
         workingMemorySettings &&
         !wmMidRunNudgeSent &&
-        !isHeartbeat &&
-        !wmIsCronRun &&
-        sessionKey
+        !wmStartNudgeSent
       ) {
         const midRunNudge = checkMidRunNudge(
           wmToolCallCount,
@@ -258,7 +264,7 @@ export async function runReplyAgent(params: {
         );
         if (midRunNudge) {
           wmMidRunNudgeSent = true;
-          enqueueSystemEvent(midRunNudge, { sessionKey });
+          enqueueSystemEvent(midRunNudge, { sessionKey: wmSessionKey });
         }
       }
     }
@@ -675,11 +681,18 @@ export async function runReplyAgent(params: {
       }
     }
 
-    if (workingMemorySettings && !isHeartbeat && !wmIsCronRun && sessionKey) {
+    if (
+      workingMemorySettings &&
+      !isHeartbeat &&
+      !wmIsCronRun &&
+      !isCliProvider(providerUsed, cfg) &&
+      sessionKey
+    ) {
       const endRunNudge = checkEndOfRunNudge(
         wmToolCallCount,
         wmHadMemoryToolCall,
         wmMidRunNudgeSent,
+        wmHadMemoryToolCallAfterMidRunNudge,
         workingMemorySettings,
       );
       if (endRunNudge) {
