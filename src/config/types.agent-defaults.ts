@@ -158,6 +158,17 @@ export type AgentDefaultsConfig = {
   contextPruning?: AgentContextPruningConfig;
   /** Compaction tuning and pre-compaction memory flush behavior. */
   compaction?: AgentCompactionConfig;
+  /** Working-memory reminder controls for task/flow hygiene. */
+  workingMemory?: {
+    /** Master toggle for nudge injection during agent runs. */
+    enabled?: boolean;
+    /** Emit a start-of-run topic check nudge when true. */
+    topicCheckOnStart?: boolean;
+    /** Fire a mid-run nudge after this many tool calls without a memory write. */
+    midRunNudgeAfterTools?: number;
+    /** Minimum tool-call threshold for end-of-run flush reminder. */
+    flushReminderMinTools?: number;
+  };
   /** Embedded Pi runner hardening and compatibility controls. */
   embeddedPi?: {
     /**
@@ -288,6 +299,17 @@ export type AgentCompactionConfig = {
   identifierInstructions?: string;
   /** Pre-compaction memory flush (agentic turn). Default: enabled. */
   memoryFlush?: AgentCompactionMemoryFlushConfig;
+};
+
+export type AgentWorkingMemoryConfig = {
+  /** Master toggle for the working memory nudge stream. */
+  enabled?: boolean;
+  /** Emit a start-of-run topic check nudge when true. */
+  topicCheckOnStart?: boolean;
+  /** Tool-call count threshold for mid-run nudge. */
+  midRunNudgeAfterTools?: number;
+  /** Tool-call count threshold for end-of-run flush reminder. */
+  flushReminderMinTools?: number;
 };
 
 export type AgentCompactionMemoryFlushConfig = {

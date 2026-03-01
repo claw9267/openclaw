@@ -11,6 +11,16 @@ import {
 } from "./zod-schema.core.js";
 import { sensitive } from "./zod-schema.sensitive.js";
 
+const WorkingMemorySettingsSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    topicCheckOnStart: z.boolean().optional(),
+    midRunNudgeAfterTools: z.number().int().positive().optional(),
+    flushReminderMinTools: z.number().int().positive().optional(),
+  })
+  .strict()
+  .optional();
+
 export const HeartbeatSchema = z
   .object({
     every: z.string().optional(),
@@ -706,6 +716,7 @@ export const AgentEntrySchema = z
     memorySearch: MemorySearchSchema,
     humanDelay: HumanDelaySchema.optional(),
     heartbeat: HeartbeatSchema,
+    workingMemory: WorkingMemorySettingsSchema,
     identity: IdentitySchema,
     groupChat: GroupChatSchema,
     subagents: z

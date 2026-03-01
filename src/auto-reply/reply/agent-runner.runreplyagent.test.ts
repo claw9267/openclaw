@@ -1,10 +1,11 @@
 import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionEntry } from "../../config/sessions.js";
 import * as sessions from "../../config/sessions.js";
 import type { TypingMode } from "../../config/types.js";
+import { peekSystemEvents, resetSystemEventsForTest } from "../../infra/system-events.js";
 import { withStateDirEnv } from "../../test-helpers/state-dir-env.js";
 import type { TemplateContext } from "../templating.js";
 import type { GetReplyOptions } from "../types.js";
@@ -23,7 +24,7 @@ type AgentRunParams = {
 type EmbeddedRunParams = {
   prompt?: string;
   extraSystemPrompt?: string;
-  onAgentEvent?: (evt: { stream?: string; data?: { phase?: string; willRetry?: boolean } }) => void;
+  onAgentEvent?: (evt: { stream?: string; data?: Record<string, unknown> }) => void;
 };
 
 const state = vi.hoisted(() => ({
@@ -88,6 +89,11 @@ beforeEach(() => {
   state.runCliAgentMock.mockClear();
   vi.mocked(enqueueFollowupRun).mockClear();
   vi.stubEnv("OPENCLAW_TEST_FAST", "1");
+  resetSystemEventsForTest();
+});
+
+afterEach(() => {
+  resetSystemEventsForTest();
 });
 
 function createMinimalRun(params?: {
@@ -124,7 +130,9 @@ function createMinimalRun(params?: {
       messageProvider: "whatsapp",
       sessionFile: "/tmp/session.jsonl",
       workspaceDir: "/tmp",
-      config: {},
+      config: {
+        agents: { defaults: { workingMemory: { topicCheckOnStart: false } } },
+      },
       skillsSnapshot: {},
       provider: "anthropic",
       model: "claude",
@@ -214,7 +222,12 @@ function createBaseRun(params: {
       messageProvider: "whatsapp",
       sessionFile: "/tmp/session.jsonl",
       workspaceDir: "/tmp",
-      config: params.config ?? {},
+      config:
+        params.config ??
+        ({ agents: { defaults: { workingMemory: { topicCheckOnStart: false } } } } as Record<
+          string,
+          unknown
+        >),
       skillsSnapshot: {},
       provider: "anthropic",
       model: "claude",
@@ -1664,6 +1677,103 @@ describe("runReplyAgent memory flush", () => {
       const stored = JSON.parse(await fs.readFile(storePath, "utf-8"));
       expect(stored[sessionKey].compactionCount).toBe(2);
       expect(stored[sessionKey].memoryFlushCompactionCount).toBe(2);
+    });
+  });
+});
+
+describe("runReplyAgent working-memory nudges integration", () => {
+  it("counts tool calls only on tool start phase", async () => {
+    await withStateDirEnv("openclaw-working-memory-integration-", async ({ stateDir }) => {
+      const storePath = path.join(stateDir, "sessions", "sessions.json");
+      const sessionKey = "main";
+      const sessionEntry = { sessionId: "session", updatedAt: Date.now() };
+
+      await seedSessionStore({ storePath, sessionKey, entry: sessionEntry });
+
+      state.runEmbeddedPiAgentMock.mockImplementationOnce(async (params: EmbeddedRunParams) => {
+        params.onAgentEvent?.({
+          stream: "tool",
+          data: { phase: "start", name: "exec", args: { command: "echo 1" } },
+        });
+        params.onAgentEvent?.({
+          stream: "tool",
+          data: { phase: "update", name: "exec", args: { command: "echo 1" } },
+        });
+        params.onAgentEvent?.({
+          stream: "tool",
+          data: { phase: "start", name: "exec", args: { command: "echo 2" } },
+        });
+        return { payloads: [{ text: "ok" }], meta: {} };
+      });
+
+      const baseRun = createBaseRun({
+        storePath,
+        sessionEntry,
+        config: {
+          agents: {
+            defaults: {
+              workingMemory: {
+                enabled: true,
+                topicCheckOnStart: false,
+                midRunNudgeAfterTools: 2,
+                flushReminderMinTools: 99,
+              },
+            },
+          },
+        },
+      });
+
+      await runReplyAgentWithBase({
+        baseRun,
+        storePath,
+        sessionKey,
+        sessionEntry: sessionEntry as SessionEntry,
+        commandBody: "hello",
+      });
+
+      const events = peekSystemEvents(sessionKey);
+      expect(events.some((event) => event.includes("2 tool calls"))).toBe(true);
+      expect(events.some((event) => event.includes("3 tool calls"))).toBe(false);
+    });
+  });
+
+  it("skips working-memory nudges for CLI providers", async () => {
+    await withStateDirEnv("openclaw-working-memory-cli-", async ({ stateDir }) => {
+      const storePath = path.join(stateDir, "sessions", "sessions.json");
+      const sessionKey = "main";
+      const sessionEntry = { sessionId: "session", updatedAt: Date.now() };
+
+      await seedSessionStore({ storePath, sessionKey, entry: sessionEntry });
+
+      state.runCliAgentMock.mockResolvedValueOnce({ payloads: [{ text: "ok" }], meta: {} });
+
+      const baseRun = createBaseRun({
+        storePath,
+        sessionEntry,
+        runOverrides: { provider: "codex-cli" },
+        config: {
+          agents: {
+            defaults: {
+              workingMemory: {
+                enabled: true,
+                topicCheckOnStart: true,
+                midRunNudgeAfterTools: 1,
+                flushReminderMinTools: 1,
+              },
+            },
+          },
+        },
+      });
+
+      await runReplyAgentWithBase({
+        baseRun,
+        storePath,
+        sessionKey,
+        sessionEntry: sessionEntry as SessionEntry,
+        commandBody: "hello",
+      });
+
+      expect(peekSystemEvents(sessionKey)).toEqual([]);
     });
   });
 });

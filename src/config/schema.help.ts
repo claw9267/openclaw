@@ -936,6 +936,25 @@ export const FIELD_HELP: Record<string, string> = {
     "User-prompt template used for the pre-compaction memory flush turn when generating memory candidates. Use this only when you need custom extraction instructions beyond the default memory flush behavior.",
   "agents.defaults.compaction.memoryFlush.systemPrompt":
     "System-prompt override for the pre-compaction memory flush turn to control extraction style and safety constraints. Use carefully so custom instructions do not reduce memory quality or leak sensitive context.",
+  "agents.defaults.workingMemory":
+    "Working-memory reminder controls to prompt topic hygiene during agent runs when significant work is done.",
+  "agents.defaults.workingMemory.enabled":
+    "Enable working-memory nudges that surface reminders to keep topic/memory records current. Set false to disable entirely.",
+  "agents.defaults.workingMemory.topicCheckOnStart":
+    "Emit a start-of-run reminder when no open topics exist for the agent run. Useful for safer session handoff and recovery.",
+  "agents.defaults.workingMemory.midRunNudgeAfterTools":
+    "Use this threshold to control when the run emits a mid-run reminder if no memory tool calls have happened; tune it with session length and tool density in mind.",
+  "agents.defaults.workingMemory.flushReminderMinTools":
+    "Use this to choose the minimum tool-call count before an end-of-run reminder is considered for sessions that made no memory writes; lower it for shorter, stricter hygiene windows.",
+  "agents.list[].workingMemory":
+    "Per-agent working-memory reminder controls for this agent list entry.",
+  "agents.list[].workingMemory.enabled": "Enable working-memory nudges for this specific agent.",
+  "agents.list[].workingMemory.topicCheckOnStart":
+    "Emit a start-of-run reminder when no open topics exist for this agent.",
+  "agents.list[].workingMemory.midRunNudgeAfterTools":
+    "Tool-call threshold for mid-run reminder checks for this agent.",
+  "agents.list[].workingMemory.flushReminderMinTools":
+    "Minimum tool-call threshold for end-of-run reminder checks for this agent.",
   "agents.defaults.embeddedPi":
     "Embedded Pi runner hardening controls for how workspace-local Pi settings are trusted and applied in OpenClaw sessions.",
   "agents.defaults.embeddedPi.projectSettingsPolicy":
