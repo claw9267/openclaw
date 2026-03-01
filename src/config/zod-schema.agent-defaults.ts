@@ -100,6 +100,15 @@ export const AgentDefaultsSchema = z
       })
       .strict()
       .optional(),
+    workingMemory: z
+      .object({
+        enabled: z.boolean().optional(),
+        topicCheckOnStart: z.boolean().optional(),
+        midRunNudgeAfterTools: z.number().int().positive().optional(),
+        flushReminderMinTools: z.number().int().positive().optional(),
+      })
+      .strict()
+      .optional(),
     embeddedPi: z
       .object({
         projectSettingsPolicy: z

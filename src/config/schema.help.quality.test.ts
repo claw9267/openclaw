@@ -368,6 +368,11 @@ const TARGET_KEYS = [
   "agents.defaults.compaction.memoryFlush.softThresholdTokens",
   "agents.defaults.compaction.memoryFlush.prompt",
   "agents.defaults.compaction.memoryFlush.systemPrompt",
+  "agents.defaults.workingMemory",
+  "agents.defaults.workingMemory.enabled",
+  "agents.defaults.workingMemory.topicCheckOnStart",
+  "agents.defaults.workingMemory.midRunNudgeAfterTools",
+  "agents.defaults.workingMemory.flushReminderMinTools",
 ] as const;
 
 const ENUM_EXPECTATIONS: Record<string, string[]> = {
